@@ -1,48 +1,29 @@
 import { useAuth } from "../contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { auth } from "../lib/firebase";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import AdvancedDashboard from "./dashboard/AdvancedDashboard";
 
 const Dashboard = () => {
     const { user, role } = useAuth();
 
     return (
-        <div className="p-8">
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold">Dashboard</h1>
-                <Button onClick={() => auth.signOut()} variant="outline">
-                    Sign Out
-                </Button>
+        <DashboardLayout>
+            <div className="space-y-8">
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-foreground">لوحة التحكم</h1>
+                        <p className="text-muted-foreground mt-1">مرحباً بك، {user?.displayName || user?.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+                        <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                        <span className="text-sm font-medium text-primary capitalize">{role?.replace('_', ' ')}</span>
+                    </div>
+                </div>
+
+                {/* Advanced Dashboard Content */}
+                <AdvancedDashboard />
             </div>
-
-            <div className="bg-white p-6 rounded-lg shadow">
-                <h2 className="text-xl font-semibold mb-2">Welcome, {user?.email}</h2>
-                <p className="text-gray-600 mb-4">You are logged in as: <span className="font-bold uppercase">{role || 'User'}</span></p>
-
-                {role === 'super_admin' && (
-                    <div className="bg-red-50 p-4 border border-red-200 rounded text-red-700">
-                        Super Admin Controls
-                    </div>
-                )}
-
-                {role === 'super_wholesaler' && (
-                    <div className="bg-blue-50 p-4 border border-blue-200 rounded text-blue-700">
-                        Super Wholesaler Panel
-                    </div>
-                )}
-
-                {role === 'wholesaler' && (
-                    <div className="bg-green-50 p-4 border border-green-200 rounded text-green-700">
-                        Wholesaler Panel
-                    </div>
-                )}
-
-                {role === 'retailer' && (
-                    <div className="bg-purple-50 p-4 border border-purple-200 rounded text-purple-700">
-                        Retailer POS System
-                    </div>
-                )}
-            </div>
-        </div>
+        </DashboardLayout>
     );
 };
 

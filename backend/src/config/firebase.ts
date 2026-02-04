@@ -1,5 +1,7 @@
 import admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 dotenv.config();
 
@@ -23,8 +25,17 @@ const mockDb = {
 } as unknown as admin.firestore.Firestore;
 
 try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  const serviceAccountPath = join(process.cwd(), 'service-account.json');
+  let serviceAccount;
+
+  if (existsSync(serviceAccountPath)) {
+    console.log(`Loading credentials from ${serviceAccountPath}`);
+    serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf-8'));
+  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  }
+
+  if (serviceAccount) {
     if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
@@ -34,7 +45,7 @@ try {
     dbVal = admin.firestore();
     authVal = admin.auth();
   } else {
-    console.warn("WARNING: FIREBASE_SERVICE_ACCOUNT_KEY not found. Starting in offline mode with MOCK implementation.");
+    console.warn("WARNING: No credentials found (service-account.json or env). Starting in offline mode with MOCK implementation.");
     dbVal = mockDb;
     authVal = mockAuth;
   }
