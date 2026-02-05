@@ -8,6 +8,7 @@ import {
     Wallet, Users, AlertTriangle, TrendingUp, TrendingDown,
     MapPin, Clock, Smartphone, Briefcase, Activity, ArrowUpRight
 } from "lucide-react";
+import { auth } from "../../lib/firebase";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -20,7 +21,15 @@ export default function AdvancedDashboard() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await fetch(`${backendUrl}/stats/dashboard`);
+                const user = auth.currentUser;
+                const token = user ? await user.getIdToken() : null;
+
+                const res = await fetch(`${backendUrl}/stats/dashboard`, {
+                    headers: {
+                        'Authorization': token ? `Bearer ${token}` : ''
+                    }
+                });
+
                 if (res.ok) {
                     const json = await res.json();
                     setData(json);
@@ -63,11 +72,11 @@ export default function AdvancedDashboard() {
                     trend="+2"
                 />
                 <KPICard
-                    title="العمليات الفاشلة"
-                    value={kpi.failedTransactions}
-                    icon={<AlertTriangle className="text-red-500" />}
-                    trend="-1%"
-                    isNegative={true}
+                    title="الرصيد الحالي"
+                    value={`${kpi.currentBalance?.toLocaleString() || 0} د.ج`}
+                    icon={<Wallet className="text-blue-500" />}
+                    trend=""
+                    isNegative={false}
                 />
             </div>
 

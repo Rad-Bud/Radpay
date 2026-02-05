@@ -15,7 +15,10 @@ import notificationRoutes from './routes/notifications.js';
 import complaintsRoutes from './routes/complaints.js';
 import settingsRoutes from './routes/settings.js';
 import transactionsRoutes from './routes/transactions.js';
+import rechargeRoutes from './routes/recharge.js';
+import operatorsRoutes from './routes/operators.js';
 import statsRoutes from './routes/stats.js';
+import cardsRoutes from './routes/cards.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -46,6 +49,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/complaints', complaintsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transactions', transactionsRoutes);
+app.use('/api/recharge', rechargeRoutes);
+app.use('/api/operators', operatorsRoutes);
+app.use('/api/cards', cardsRoutes);
 
 console.log('Registering /api/stats route...');
 app.use('/api/stats', statsRoutes);

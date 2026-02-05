@@ -5,8 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, ArrowRight, Gamepad2, Package } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowRight, Gamepad2, Package, Layers, Archive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import GameCardsTable from "@/components/cards/GameCardsTable";
+import AddGameCardDialog from "@/components/cards/AddGameCardDialog";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -18,10 +21,15 @@ const Games = () => {
     // Modal States
     const [isAddGameOpen, setIsAddGameOpen] = useState(false);
     const [isAddPackageOpen, setIsAddPackageOpen] = useState(false);
+    const [isAddCardOpen, setIsAddCardOpen] = useState(false);
 
     // Form Data
     const [gameForm, setGameForm] = useState({ name: "", description: "" });
     const [packageForm, setPackageForm] = useState({ name: "", price: "", costPrice: "" });
+
+    // Inventory State
+    const [gameCards, setGameCards] = useState<any[]>([]);
+    const [cardsLoading, setCardsLoading] = useState(false);
 
     useEffect(() => {
         fetchGames();
@@ -40,6 +48,29 @@ const Games = () => {
             setLoading(false);
         }
     };
+
+    // Fetch Cards for selected game
+    const fetchGameCards = async (gameId: string) => {
+        setCardsLoading(true);
+        try {
+            const res = await fetch(`${backendUrl}/cards?operator=${gameId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setGameCards(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch game cards", error);
+        } finally {
+            setCardsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedGame) {
+            fetchGameCards(selectedGame.id);
+        }
+    }, [selectedGame]);
+
 
     // --- Game Handlers ---
 
@@ -87,22 +118,14 @@ const Games = () => {
             if (res.ok) {
                 setIsAddPackageOpen(false);
                 setPackageForm({ name: "", price: "", costPrice: "" });
-                fetchGames(); // Refresh whole tree to update state
-                // Optimistically update selectedGame or refetch specific game could be better, 
-                // but fetchGames is simpler for now as it returns nested packages.
+                // Refresh games to update the packages list in state
+                const updatedGamesRes = await fetch(`${backendUrl}/games`);
+                const updatedGames = await updatedGamesRes.json();
+                setGames(updatedGames);
 
-                // Hack: We need to re-select the game after fetchGames updates `games` state. 
-                // Since hooks are async, we might lose selection or show stale data.
-                // Better approach: locally update state.
-                const newPackage = await res.json();
-                setGames(prev => prev.map(g => {
-                    if (g.id === selectedGame.id) {
-                        const updatedGame = { ...g, packages: [...(g.packages || []), newPackage] };
-                        setSelectedGame(updatedGame); // Keep view updated
-                        return updatedGame;
-                    }
-                    return g;
-                }));
+                // Update selected game reference
+                const updatedSelectedGame = updatedGames.find((g: any) => g.id === selectedGame.id);
+                if (updatedSelectedGame) setSelectedGame(updatedSelectedGame);
             }
         } catch (error) {
             alert("فشل إضافة الباقة");
@@ -129,6 +152,30 @@ const Games = () => {
         }
     };
 
+    // --- Card Handlers ---
+    const handleAddCardSubmit = async (data: any) => {
+        try {
+            const res = await fetch(`${backendUrl}/cards`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    operator: selectedGame.id, // Store GameID as Operator
+                    ...data
+                })
+            });
+
+            if (res.ok) {
+                alert("تم إضافة البطاقة بنجاح");
+                fetchGameCards(selectedGame.id);
+            } else {
+                alert("فشل إضافة البطاقة");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("خطأ في الاتصال");
+        }
+    };
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -137,8 +184,8 @@ const Games = () => {
                         <h1 className="text-3xl font-bold">شحن الألعاب</h1>
                         <p className="text-muted-foreground mt-1">
                             {selectedGame
-                                ? `إدارة باقات: ${selectedGame.name}`
-                                : 'إدارة أنواع الألعاب وباقات الشحن'
+                                ? `إدارة: ${selectedGame.name}`
+                                : 'إدارة أنواع الألعاب وباقات الشحن والمخزون'
                             }
                         </p>
                     </div>
@@ -224,111 +271,173 @@ const Games = () => {
                         </div>
                     </div>
                 ) : (
-                    // --- Packages View (Inside Game) ---
+                    // --- Game Detailed View (Tabs: Packages / Inventory) ---
                     <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center bg-muted/30 p-4 rounded-lg">
+                            <h2 className="text-2xl font-bold flex items-center gap-2">
+                                <Gamepad2 className="w-6 h-6" />
+                                {selectedGame.name}
+                            </h2>
                             <Button variant="outline" className="gap-2" onClick={() => setSelectedGame(null)}>
                                 <ArrowRight className="w-4 h-4" /> رجوع للقائمة
                             </Button>
-
-                            <Dialog open={isAddPackageOpen} onOpenChange={setIsAddPackageOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2">
-                                        <Plus className="w-4 h-4" /> إضافة باقة شحن
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="text-right" dir="rtl">
-                                    <DialogHeader className="text-right">
-                                        <DialogTitle>إضافة باقة لـ {selectedGame.name}</DialogTitle>
-                                    </DialogHeader>
-                                    <form onSubmit={handleAddPackage} className="space-y-4 py-4">
-                                        <div className="space-y-2">
-                                            <Label>اسم الباقة / الكمية</Label>
-                                            <Input
-                                                value={packageForm.name}
-                                                onChange={(e) => setPackageForm({ ...packageForm, name: e.target.value })}
-                                                placeholder="مثال: 100 + 10 جوهرة"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label>سعر البيع (د.ج)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={packageForm.price}
-                                                    onChange={(e) => setPackageForm({ ...packageForm, price: e.target.value })}
-                                                    placeholder="مثال: 250"
-                                                    required
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label>سعر التكلفة (اختياري)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={packageForm.costPrice}
-                                                    onChange={(e) => setPackageForm({ ...packageForm, costPrice: e.target.value })}
-                                                    placeholder="مثال: 200"
-                                                />
-                                            </div>
-                                        </div>
-                                        <DialogFooter>
-                                            <Button type="submit">إضافة الباقة</Button>
-                                        </DialogFooter>
-                                    </form>
-                                </DialogContent>
-                            </Dialog>
                         </div>
 
-                        <div className="rounded-xl border bg-card">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="text-right">اسم الباقة</TableHead>
-                                        <TableHead className="text-right">سعر البيع</TableHead>
-                                        <TableHead className="text-right">سعر التكلفة</TableHead>
-                                        <TableHead className="text-right">الحالة</TableHead>
-                                        <TableHead className="text-right">إجراءات</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selectedGame.packages?.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                                لا توجد باقات مضافة لهذه اللعبة
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        selectedGame.packages?.map((pkg: any) => (
-                                            <TableRow key={pkg.id}>
-                                                <TableCell className="font-medium">{pkg.name}</TableCell>
-                                                <TableCell className="font-bold text-emerald-600">
-                                                    {Number(pkg.price).toLocaleString()} د.ج
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {pkg.costPrice ? `${Number(pkg.costPrice).toLocaleString()} د.ج` : '-'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-bold">
-                                                        نشط
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                        onClick={() => handleDeletePackage(pkg.id)}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </TableCell>
+                        <Tabs defaultValue="packages" className="w-full">
+                            <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
+                                <TabsTrigger
+                                    value="packages"
+                                    className="data-[state=active]:bg-transparent data-[state=active]:box-content data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Layers className="w-4 h-4" />
+                                        باقات اللعبة
+                                    </div>
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="inventory"
+                                    className="data-[state=active]:bg-transparent data-[state=active]:box-content data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-2"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Archive className="w-4 h-4" />
+                                        المخزون والبطاقات
+                                    </div>
+                                </TabsTrigger>
+                            </TabsList>
+
+                            {/* --- TAB: PACKAGES --- */}
+                            <TabsContent value="packages" className="pt-6 space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold">قائمة الباقات</h3>
+                                    <Dialog open={isAddPackageOpen} onOpenChange={setIsAddPackageOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button className="gap-2">
+                                                <Plus className="w-4 h-4" /> إضافة باقة
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="text-right" dir="rtl">
+                                            <DialogHeader className="text-right">
+                                                <DialogTitle>إضافة باقة لـ {selectedGame.name}</DialogTitle>
+                                            </DialogHeader>
+                                            <form onSubmit={handleAddPackage} className="space-y-4 py-4">
+                                                <div className="space-y-2">
+                                                    <Label>اسم الباقة / الكمية</Label>
+                                                    <Input
+                                                        value={packageForm.name}
+                                                        onChange={(e) => setPackageForm({ ...packageForm, name: e.target.value })}
+                                                        placeholder="مثال: 100 + 10 جوهرة"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label>سعر البيع (د.ج)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            value={packageForm.price}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, price: e.target.value })}
+                                                            placeholder="مثال: 250"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>سعر التكلفة (اختياري)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            value={packageForm.costPrice}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, costPrice: e.target.value })}
+                                                            placeholder="مثال: 200"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <DialogFooter>
+                                                    <Button type="submit">إضافة الباقة</Button>
+                                                </DialogFooter>
+                                            </form>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+
+                                <div className="rounded-xl border bg-card">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-right">اسم الباقة</TableHead>
+                                                <TableHead className="text-right">سعر البيع</TableHead>
+                                                <TableHead className="text-right">سعر التكلفة</TableHead>
+                                                <TableHead className="text-right">الحالة</TableHead>
+                                                <TableHead className="text-right">إجراءات</TableHead>
                                             </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {selectedGame.packages?.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                        لا توجد باقات مضافة لهذه اللعبة
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                selectedGame.packages?.map((pkg: any) => (
+                                                    <TableRow key={pkg.id}>
+                                                        <TableCell className="font-medium">{pkg.name}</TableCell>
+                                                        <TableCell className="font-bold text-emerald-600">
+                                                            {Number(pkg.price).toLocaleString()} د.ج
+                                                        </TableCell>
+                                                        <TableCell className="text-muted-foreground">
+                                                            {pkg.costPrice ? `${Number(pkg.costPrice).toLocaleString()} د.ج` : '-'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-bold">
+                                                                نشط
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                onClick={() => handleDeletePackage(pkg.id)}
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </TabsContent>
+
+                            {/* --- TAB: INVENTORY --- */}
+                            <TabsContent value="inventory" className="pt-6 space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold">سجل البطاقات (المخزون)</h3>
+                                    <Button className="gap-2" onClick={() => setIsAddCardOpen(true)} disabled={!selectedGame.packages?.length}>
+                                        <Plus className="w-4 h-4" /> إضافة بطاقة
+                                    </Button>
+                                </div>
+
+                                {!selectedGame.packages?.length && (
+                                    <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg flex items-center gap-2 mb-4">
+                                        يجب إضافة باقات أولاً قبل التمكّن من إضافة بطاقات للمخزون.
+                                    </div>
+                                )}
+
+                                <GameCardsTable
+                                    cards={gameCards}
+                                    packages={selectedGame.packages || []}
+                                    loading={cardsLoading}
+                                />
+
+                                <AddGameCardDialog
+                                    open={isAddCardOpen}
+                                    onOpenChange={setIsAddCardOpen}
+                                    onSubmit={handleAddCardSubmit}
+                                    packages={selectedGame.packages || []}
+                                />
+                            </TabsContent>
+                        </Tabs>
                     </div>
                 )}
             </div>

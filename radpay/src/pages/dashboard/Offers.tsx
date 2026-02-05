@@ -5,8 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, ArrowRight, Play } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowRight, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import InternetCardCategories from "@/components/cards/InternetCardCategories";
+import CardsTable from "@/components/cards/CardsTable";
+import AddCardDialog from "@/components/cards/AddCardDialog";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -26,13 +29,21 @@ const Offers = () => {
     const [selectedOperator, setSelectedOperator] = useState<string | null>(null);
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
-    const [isExecuteOpen, setIsExecuteOpen] = useState(false);
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
 
     const [offers, setOffers] = useState<any[]>([]);
     const [sims, setSims] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedOffer, setSelectedOffer] = useState<any>(null);
-    const [selectedSimId, setSelectedSimId] = useState<string>("");
+
+    // Internet Cards State
+    const [selectedCardCategory, setSelectedCardCategory] = useState<number | null>(null);
+    const [internetCards, setInternetCards] = useState<any[]>([]);
+    const [isAddCardOpen, setIsAddCardOpen] = useState(false);
+
+    // Config State
+    const [configOperator, setConfigOperator] = useState<string | null>(null);
+    const [flexyTemplate, setFlexyTemplate] = useState("");
 
     const [formData, setFormData] = useState({
         operator: "mobilis",
@@ -46,6 +57,13 @@ const Offers = () => {
         fetchOffers();
         fetchSims();
     }, []);
+
+    // Internet Cards Effect
+    useEffect(() => {
+        if (selectedCardCategory) {
+            fetchInternetCards(selectedCardCategory);
+        }
+    }, [selectedCardCategory]);
 
     const fetchOffers = async () => {
         try {
@@ -73,6 +91,21 @@ const Offers = () => {
         }
     };
 
+    const fetchInternetCards = async (category: number) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${backendUrl}/cards?operator=${selectedOperator}&category=${category}`);
+            if (res.ok) {
+                const data = await res.json();
+                setInternetCards(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch cards", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleOperatorSelect = (operatorId: string) => {
         setSelectedOperator(operatorId);
         setFormData(prev => ({ ...prev, operator: operatorId }));
@@ -80,6 +113,11 @@ const Offers = () => {
 
     const handleBackToOperators = () => {
         setSelectedOperator(null);
+    };
+
+    const handleBackToCategories = () => {
+        setSelectedCardCategory(null);
+        setInternetCards([]);
     };
 
     const filteredOffers = selectedOperator
@@ -116,6 +154,30 @@ const Offers = () => {
             }
         } catch (error) {
             alert("فشل الاتصال بالسيرفر");
+        }
+    };
+
+    const handleAddCardSubmit = async (data: any) => {
+        try {
+            const res = await fetch(`${backendUrl}/cards`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    operator: selectedOperator,
+                    category: selectedCardCategory, // Use the selected category
+                    ...data
+                })
+            });
+
+            if (res.ok) {
+                alert("تم إضافة البطاقة بنجاح");
+                if (selectedCardCategory) fetchInternetCards(selectedCardCategory);
+            } else {
+                alert("فشل إضافة البطاقة");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("خطأ في الاتصال");
         }
     };
 
@@ -163,43 +225,47 @@ const Offers = () => {
         }
     };
 
-    const handleExecuteClick = (offer: any) => {
-        setSelectedOffer(offer);
-        setSelectedSimId("");
-        setIsExecuteOpen(true);
+    const handleConfigClick = async (operatorId: string) => {
+        setConfigOperator(operatorId);
+        try {
+            const res = await fetch(`${backendUrl}/operators/${operatorId}/config`);
+            if (res.ok) {
+                const data = await res.json();
+                setFlexyTemplate(data.flexyTemplate || "");
+            } else {
+                setFlexyTemplate("");
+            }
+            setIsConfigOpen(true);
+        } catch (error) {
+            console.error("Failed to fetch config", error);
+            alert("فشل تحميل الإعدادات");
+        }
     };
 
-    const handleExecuteSubmit = async (e: React.FormEvent) => {
+    const handleConfigSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedSimId || !selectedOffer) {
-            alert("يرجى اختيار شريحة");
-            return;
-        }
+        if (!configOperator) return;
 
         try {
-            const res = await fetch(`${backendUrl}/gateway/execute-offer`, {
+            const res = await fetch(`${backendUrl}/operators/${configOperator}/config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    simId: selectedSimId,
-                    ussdCode: selectedOffer.ussdTemplate,
-                    offerName: selectedOffer.name,
-                    price: selectedOffer.price
-                })
+                body: JSON.stringify({ flexyTemplate })
             });
 
             if (res.ok) {
-                const data = await res.json();
-                alert(`تم تنفيذ العرض بنجاح!\n${data.message || ''}`);
-                setIsExecuteOpen(false);
+                alert("تم تحديث الإعدادات بنجاح!");
+                setIsConfigOpen(false);
             } else {
-                const error = await res.json();
-                alert(`فشل في تنفيذ العرض: ${error.error || 'خطأ غير معروف'}`);
+                alert("خطأ في التحديث");
             }
         } catch (error) {
-            alert("خطأ في الاتصال بالسيرفر");
+            console.error("Failed to update config", error);
+            alert("فشل الاتصال بالسيرفر");
         }
     };
+
+    const isInternetProvider = (id: string) => ['idoom', 'fiber', 'adsl'].includes(id);
 
     return (
         <DashboardLayout>
@@ -208,7 +274,7 @@ const Offers = () => {
                     <h1 className="text-3xl font-bold">عروض المتعاملين</h1>
                     <p className="text-muted-foreground">
                         {selectedOperator
-                            ? `إدارة عروض ${operators.find(op => op.id === selectedOperator)?.name}`
+                            ? `إدارة عروض ${[...operators, ...internetProviders].find(op => op.id === selectedOperator)?.name}`
                             : 'اختر متعاملاً لعرض وإدارة العروض الخاصة به'
                         }
                     </p>
@@ -221,10 +287,20 @@ const Offers = () => {
                             {operators.map(operator => (
                                 <Card
                                     key={operator.id}
-                                    className="cursor-pointer hover:shadow-lg transition-all border-l-4 hover:border-l-8"
+                                    className="cursor-pointer hover:shadow-lg transition-all border-l-4 hover:border-l-8 relative group"
                                     style={{ borderLeftColor: operator.id === 'mobilis' ? '#16a34a' : operator.id === 'djezzy' ? '#dc2626' : '#eab308' }}
                                     onClick={() => handleOperatorSelect(operator.id)}
                                 >
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleConfigClick(operator.id);
+                                        }}
+                                        className="absolute top-2 left-2 p-2 hover:bg-muted rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="إعدادات الشحن"
+                                    >
+                                        <Settings className="w-4 h-4 text-muted-foreground" />
+                                    </button>
                                     <CardHeader>
                                         <CardTitle className={`text-2xl ${operator.textColor}`}>{operator.name}</CardTitle>
                                         <CardDescription>اضغط لإدارة العروض</CardDescription>
@@ -263,6 +339,44 @@ const Offers = () => {
                                 ))}
                             </div>
                         </div>
+                    </div>
+                ) : isInternetProvider(selectedOperator) ? (
+                    // Internet Cards View
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                        <div className="flex justify-between items-center mb-6">
+                            <Button variant="ghost" className="gap-2" onClick={selectedCardCategory ? handleBackToCategories : handleBackToOperators}>
+                                <ArrowRight className="w-4 h-4" />
+                                {selectedCardCategory ? 'رجوع للفئات' : 'رجوع للمتعاملين'}
+                            </Button>
+
+                            {selectedCardCategory && (
+                                <Button className="gap-2" onClick={() => setIsAddCardOpen(true)}>
+                                    <Plus className="w-4 h-4" />
+                                    إضافة بطاقة
+                                </Button>
+                            )}
+                        </div>
+
+                        {!selectedCardCategory ? (
+                            <InternetCardCategories onSelect={setSelectedCardCategory} />
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h2 className="text-2xl font-bold">بطاقات {selectedCardCategory} د.ج</h2>
+                                    <span className="text-muted-foreground text-sm">({internetCards.length} بطاقة)</span>
+                                </div>
+                                <CardsTable cards={internetCards} loading={loading} />
+                            </>
+                        )}
+
+                        {selectedCardCategory && (
+                            <AddCardDialog
+                                open={isAddCardOpen}
+                                onOpenChange={setIsAddCardOpen}
+                                onSubmit={handleAddCardSubmit}
+                                category={selectedCardCategory}
+                            />
+                        )}
                     </div>
                 ) : (
                     // Offers List View
@@ -371,15 +485,7 @@ const Offers = () => {
                                                 {offer.ussdTemplate}
                                             </TableCell>
                                             <TableCell className="flex gap-2">
-                                                <Button
-                                                    variant="default"
-                                                    size="sm"
-                                                    className="gap-1"
-                                                    onClick={() => handleExecuteClick(offer)}
-                                                >
-                                                    <Play className="w-4 h-4" />
-                                                    تنفيذ
-                                                </Button>
+
                                                 <Button variant="ghost" size="sm" onClick={() => handleEditClick(offer)}>
                                                     <Edit className="w-4 h-4" />
                                                 </Button>
@@ -448,66 +554,32 @@ const Offers = () => {
                 )}
             </div>
 
-            {/* Execute Offer Dialog */}
-            <Dialog open={isExecuteOpen} onOpenChange={setIsExecuteOpen}>
+            {/* Config Dialog */}
+            <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
                 <DialogContent className="sm:max-w-[500px] text-right" dir="rtl">
                     <DialogHeader className="text-right">
-                        <DialogTitle>تنفيذ العرض</DialogTitle>
+                        <DialogTitle>إعدادات الشحن العادي (Flexy)</DialogTitle>
                         <DialogDescription>
-                            اختر الشريحة التي تريد تنفيذ العرض عليها
+                            ضبط قالب USSD لعمليات الشحن العادي الخاصة بـ {operators.find(op => op.id === configOperator)?.name}
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleExecuteSubmit} className="space-y-4 py-4">
-                        {selectedOffer && (
-                            <div className="space-y-4 p-4 bg-muted rounded-lg">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">اسم العرض:</span>
-                                    <span className="font-semibold">{selectedOffer.name}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">السعر:</span>
-                                    <span className="font-bold text-emerald-600">
-                                        {Number(selectedOffer.price).toLocaleString()} د.ج
-                                    </span>
-                                </div>
-                                {selectedOffer.description && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">الوصف:</span>
-                                        <span className="text-sm">{selectedOffer.description}</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
+                    <form onSubmit={handleConfigSubmit} className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label htmlFor="simId">اختر الشريحة</Label>
-                            <select
-                                id="simId"
-                                value={selectedSimId}
-                                onChange={(e) => setSelectedSimId(e.target.value)}
-                                className="w-full px-3 py-2 border rounded-md"
-                                required
-                            >
-                                <option value="">-- اختر شريحة --</option>
-                                {sims.map((sim, index) => (
-                                    <option key={sim.id} value={sim.id}>
-                                        شريحة #{index + 1} - {sim.phone} ({sim.operator})
-                                    </option>
-                                ))}
-                            </select>
-                            {sims.length === 0 && (
-                                <p className="text-sm text-red-500">لا توجد شرائح متاحة. يرجى إضافة شريحة أولاً.</p>
-                            )}
+                            <Label htmlFor="flexyTemplate">قالب كود USSD</Label>
+                            <Input
+                                id="flexyTemplate"
+                                value={flexyTemplate}
+                                onChange={(e) => setFlexyTemplate(e.target.value)}
+                                placeholder="مثال: *610*{phone}*{amount}*{pin}#"
+                                className="font-mono text-left"
+                                dir="ltr"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                المتغيرات المتاحة: <code className="bg-muted px-1">{"{phone}"}</code>, <code className="bg-muted px-1">{"{amount}"}</code>, <code className="bg-muted px-1">{"{pin}"}</code>
+                            </p>
                         </div>
-
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsExecuteOpen(false)}>
-                                إلغاء
-                            </Button>
-                            <Button type="submit" disabled={!selectedSimId || sims.length === 0}>
-                                <Play className="w-4 h-4 ml-2" />
-                                تنفيذ العرض
-                            </Button>
+                            <Button type="submit">حفظ الإعدادات</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

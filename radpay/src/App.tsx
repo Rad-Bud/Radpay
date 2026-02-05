@@ -16,6 +16,9 @@ import Notifications from "./pages/dashboard/Notifications";
 import Complaints from "./pages/dashboard/Complaints";
 import Transactions from "./pages/dashboard/Transactions";
 import Settings from "./pages/dashboard/Settings";
+import Financials from "./pages/dashboard/Financials";
+import RechargeBalance from "./pages/dashboard/RechargeBalance";
+import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 
@@ -35,16 +38,31 @@ const App = () => (
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/users" element={<Users />} />
-              <Route path="/dashboard/sims" element={<Sims />} />
-              <Route path="/dashboard/offers" element={<Offers />} />
-              <Route path="/dashboard/games" element={<Games />} />
-              <Route path="/dashboard/delivery-apps" element={<DeliveryApps />} />
+
+              {/* Users - Super Admin & Wholesaler */}
+              <Route element={<ProtectedRoute allowedRoles={['super_admin', 'wholesaler']} />}>
+                <Route path="/dashboard/users" element={<Users />} />
+                <Route path="/dashboard/financials" element={<Financials />} />
+              </Route>
+
+              {/* Super Admin Only */}
+              <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
+                <Route path="/dashboard/sims" element={<Sims />} />
+                <Route path="/dashboard/offers" element={<Offers />} />
+                <Route path="/dashboard/games" element={<Games />} />
+                <Route path="/dashboard/delivery-apps" element={<DeliveryApps />} />
+              </Route>
+
+              {/* All Authenticated Users */}
               <Route path="/dashboard/notifications" element={<Notifications />} />
               <Route path="/dashboard/complaints" element={<Complaints />} />
               <Route path="/dashboard/transactions" element={<Transactions />} />
+              <Route path="/dashboard/transactions" element={<Transactions />} />
+              <Route path="/dashboard/recharge-balance" element={<RechargeBalance />} />
               <Route path="/dashboard/settings" element={<Settings />} />
             </Route>
+
+            <Route path="/unauthorized" element={<Unauthorized />} />
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

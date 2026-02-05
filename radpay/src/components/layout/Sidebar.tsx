@@ -14,26 +14,47 @@ import {
     Bell,
     MessageSquareWarning,
     ChevronRight,
-    ChevronLeft
+    ChevronLeft,
+    Landmark
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 
-const sidebarItems = [
-    { icon: LayoutDashboard, label: "الرئيسية", href: "/dashboard" },
-    { icon: Users, label: "إدارة المستخدمين", href: "/dashboard/users" },
-    { icon: Smartphone, label: "إدارة الشرائح", href: "/dashboard/sims" },
-    { icon: Tag, label: "عروض المتعاملين", href: "/dashboard/offers" },
-    { icon: Gamepad2, label: "شحن الألعاب", href: "/dashboard/games" },
-    { icon: Bike, label: "تطبيقات التوصيل", href: "/dashboard/delivery-apps" },
-    { icon: Bell, label: "الإشعارات", href: "/dashboard/notifications" },
-    { icon: MessageSquareWarning, label: "الشكاوي", href: "/dashboard/complaints" },
-    { icon: History, label: "سجل العمليات", href: "/dashboard/transactions" },
-    { icon: Settings, label: "الإعدادات", href: "/dashboard/settings" },
-];
+// Menu items for each role
+const menuItemsByRole: Record<string, Array<{ icon: any; label: string; href: string }>> = {
+    super_admin: [
+        { icon: LayoutDashboard, label: "الرئيسية", href: "/dashboard" },
+        { icon: Landmark, label: "المالية", href: "/dashboard/financials" },
+        { icon: Users, label: "إدارة المستخدمين", href: "/dashboard/users" },
+        { icon: Smartphone, label: "إدارة الشرائح", href: "/dashboard/sims" },
+        { icon: Tag, label: "عروض المتعاملين", href: "/dashboard/offers" },
+        { icon: Gamepad2, label: "شحن الألعاب", href: "/dashboard/games" },
+        { icon: Bike, label: "تطبيقات التوصيل", href: "/dashboard/delivery-apps" },
+        { icon: Bell, label: "الإشعارات", href: "/dashboard/notifications" },
+        { icon: MessageSquareWarning, label: "الشكاوي", href: "/dashboard/complaints" },
+        { icon: History, label: "سجل العمليات", href: "/dashboard/transactions" },
+
+    ],
+    wholesaler: [
+        { icon: LayoutDashboard, label: "لوحة التحكم", href: "/dashboard" },
+        { icon: Users, label: "إدارة المستخدمين", href: "/dashboard/users" },
+        { icon: Wallet, label: "التفاصيل المالية", href: "/dashboard/financials" },
+        { icon: Smartphone, label: "شحن رصيد", href: "/dashboard/recharge-balance" },
+        { icon: History, label: "سجل العمليات", href: "/dashboard/transactions" },
+
+    ],
+    retailer: [
+        { icon: LayoutDashboard, label: "لوحة التحكم", href: "/dashboard" },
+        { icon: Wallet, label: "رصيدي", href: "/dashboard/balance" },
+        { icon: History, label: "عملياتي", href: "/dashboard/transactions" },
+
+    ]
+};
 
 const Sidebar = () => {
     const location = useLocation();
+    const { role } = useAuth();
     const [isCollapsed, setIsCollapsed] = useState(() => {
         const saved = localStorage.getItem('sidebarCollapsed');
         return saved === 'true';
@@ -46,6 +67,9 @@ const Sidebar = () => {
     const toggleSidebar = () => {
         setIsCollapsed(!isCollapsed);
     };
+
+    // Get menu items for current role
+    const sidebarItems = menuItemsByRole[role || 'retailer'] || menuItemsByRole.retailer;
 
     return (
         <div className={cn(

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatCurrency } from "@/lib/utils";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +13,12 @@ import { Plus, Search, MapPin, Upload, DollarSign, Edit, AlertCircle } from "luc
 
 import { algeriaData, getBaladiyatByWilaya } from "@/lib/algeria-complete";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 const backendUrl = "http://localhost:3000/api";
 
 const Users = () => {
+    const { role: currentUserRole, user: authUser } = useAuth();
+    const currentUserId = authUser?.uid;
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isBalanceOpen, setIsBalanceOpen] = useState(false);
@@ -57,7 +61,23 @@ const Users = () => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${backendUrl}/users`);
+            // Build query parameters based on role
+            let url = `${backendUrl}/users`;
+            const params = new URLSearchParams();
+
+            // If wholesaler, only show retailers they created
+            if (currentUserRole === 'wholesaler' && currentUserId) {
+                params.append('createdBy', currentUserId);
+                params.append('role', 'retailer');
+            }
+
+            if (params.toString()) {
+                url += `?${params.toString()}`;
+            }
+
+            console.log('[Users] Fetching with URL:', url);
+
+            const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
                 console.log('Fetched users:', data);
@@ -118,7 +138,17 @@ const Users = () => {
                 alert("تم إضافة المستخدم بنجاح!");
                 setIsAddOpen(false);
                 fetchUsers();
-                setFormData({ name: "", phone: "", email: "", password: "", role: "retailer", location: "", idCard: null });
+                setFormData({
+                    name: "",
+                    phone: "",
+                    email: "",
+                    password: "",
+                    role: "retailer",
+                    wilaya: "",
+                    baladiya: "",
+                    location: "",
+                    idCard: null
+                });
             } else {
                 const err = await res.json();
                 alert("خطأ: " + err.error);
@@ -234,7 +264,8 @@ const Users = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     amount: Number(balanceAmount),
-                    type: transactionType
+                    type: transactionType === 'zero' ? 'set' : transactionType,
+                    chargedBy: authUser?.uid
                 })
             });
 
@@ -317,10 +348,16 @@ const Users = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>نوع الحساب</Label>
-                                    <Select onValueChange={(val) => setFormData(prev => ({ ...prev, role: val }))} defaultValue={formData.role}>
+                                    <Select
+                                        onValueChange={(val) => setFormData(prev => ({ ...prev, role: val }))}
+                                        defaultValue={formData.role}
+                                        disabled={currentUserRole === 'wholesaler'}
+                                    >
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="wholesaler">بائع جملة</SelectItem>
+                                            {currentUserRole === 'super_admin' && (
+                                                <SelectItem value="wholesaler">بائع جملة</SelectItem>
+                                            )}
                                             <SelectItem value="retailer">بائع تجزئة</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -526,24 +563,47 @@ const Users = () => {
                         <div className="flex items-center gap-4 mb-4 p-3 bg-muted/50 rounded-lg">
                             <div className="flex-1 text-center border-l border-border/50">
                                 <p className="text-xs text-muted-foreground">الرصيد الحالي</p>
-                                <p className="font-bold text-emerald-600 text-lg">{selectedUser?.balance?.toLocaleString()} <span className="text-xs">د.ج</span></p>
+                                <p className="font-bold text-emerald-600 text-lg">{formatCurrency(selectedUser?.balance)} <span className="text-xs">د.ج</span></p>
                             </div>
                             <div className="flex-1 text-center">
                                 <p className="text-xs text-muted-foreground">الديون المستحقة</p>
-                                <p className="font-bold text-red-500 text-lg">{selectedUser?.debt?.toLocaleString() || 0} <span className="text-xs">د.ج</span></p>
+                                <p className="font-bold text-red-500 text-lg">{formatCurrency(selectedUser?.debt)} <span className="text-xs">د.ج</span></p>
                             </div>
                         </div>
 
-                        <Tabs defaultValue="cash" onValueChange={setTransactionType} className="w-full">
-                            <TabsList className="grid w-full grid-cols-3 mb-4">
-                                <TabsTrigger value="cash">شحن نقدي 💵</TabsTrigger>
-                                <TabsTrigger value="credit">شحن آجل (دين) 📝</TabsTrigger>
-                                <TabsTrigger value="repay">تسديد دين ↩️</TabsTrigger>
+                        <Tabs defaultValue="cash" onValueChange={(val) => {
+                            setTransactionType(val);
+                            if (val === 'zero') setBalanceAmount("0");
+                            else setBalanceAmount("");
+                        }} className="w-full">
+                            <TabsList className={`grid w-full mb-4 ${currentUserRole === 'super_admin' ? 'grid-cols-6' : 'grid-cols-3'}`}>
+                                <TabsTrigger value="cash">شحن 💵</TabsTrigger>
+                                {currentUserRole === 'super_admin' && (
+                                    <>
+                                        <TabsTrigger value="deduct">خصم 🔻</TabsTrigger>
+                                        <TabsTrigger value="set">تعيين ⚙️</TabsTrigger>
+                                        <TabsTrigger value="zero">تصفير 🗑️</TabsTrigger>
+                                    </>
+                                )}
+                                <TabsTrigger value="credit">دين 📝</TabsTrigger>
+                                <TabsTrigger value="repay">تسديد ↩️</TabsTrigger>
                             </TabsList>
 
-                            <form onSubmit={handleBalanceSubmit} className="space-y-4">
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                if (transactionType === 'zero') {
+                                    handleBalanceSubmit(e);
+                                } else {
+                                    handleBalanceSubmit(e);
+                                }
+                            }} className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label>المبلغ (DZD)</Label>
+                                    <Label>
+                                        {transactionType === 'set' ? 'الرصيد الجديد (DZD)' :
+                                            transactionType === 'deduct' ? 'المبلغ المراد خصمه (DZD)' :
+                                                transactionType === 'zero' ? 'قيمة الرصيد الجديد' :
+                                                    'المبلغ (DZD)'}
+                                    </Label>
                                     <Input
                                         type="number"
                                         value={balanceAmount}
@@ -551,17 +611,30 @@ const Users = () => {
                                         placeholder="0"
                                         className="text-right text-lg font-bold"
                                         autoFocus
-                                        min="1"
+                                        min="0"
+                                        disabled={transactionType === 'zero'}
                                     />
                                 </div>
 
                                 <TabsContent value="cash" className="text-xs text-muted-foreground mt-2">
                                     <AlertCircle className="w-3 h-3 inline ml-1" />
-                                    سيتم إضافة المبلغ للرصيد مباشرة (دفع فوري).
+                                    سيتم إضافة المبلغ للرصيد مباشرة.
+                                </TabsContent>
+                                <TabsContent value="deduct" className="text-xs text-muted-foreground mt-2">
+                                    <AlertCircle className="w-3 h-3 inline ml-1" />
+                                    سيتم إنقاص الرصيد الحالي بهذا المبلغ.
+                                </TabsContent>
+                                <TabsContent value="zero" className="text-xs text-muted-foreground mt-2">
+                                    <AlertCircle className="w-3 h-3 inline ml-1" />
+                                    تحذير: سيتم حذف الرصيد بالكامل وتعيينه إلى 0.
+                                </TabsContent>
+                                <TabsContent value="set" className="text-xs text-muted-foreground mt-2">
+                                    <AlertCircle className="w-3 h-3 inline ml-1" />
+                                    سيتم تغيير الرصيد الحالي ليصبح مساوياً لهذا المبلغ تماماً.
                                 </TabsContent>
                                 <TabsContent value="credit" className="text-xs text-muted-foreground mt-2">
                                     <AlertCircle className="w-3 h-3 inline ml-1" />
-                                    سيتم إضافة المبلغ للرصيد وتسجيله كدين على المستخدم.
+                                    سيتم إضافة المبلغ للرصيد وتسجيله كدين.
                                 </TabsContent>
                                 <TabsContent value="repay" className="text-xs text-muted-foreground mt-2">
                                     <AlertCircle className="w-3 h-3 inline ml-1" />
@@ -572,10 +645,15 @@ const Users = () => {
                                     <Button type="submit"
                                         className={`w-full ${transactionType === 'repay' ? 'bg-blue-600 hover:bg-blue-700' :
                                             transactionType === 'credit' ? 'bg-orange-600 hover:bg-orange-700' :
-                                                'bg-emerald-600 hover:bg-emerald-700'
+                                                transactionType === 'deduct' ? 'bg-red-600 hover:bg-red-700' :
+                                                    transactionType === 'set' ? 'bg-gray-600 hover:bg-gray-700' :
+                                                        'bg-emerald-600 hover:bg-emerald-700'
                                             }`}
                                     >
-                                        {transactionType === 'repay' ? 'تأكيد التسديد' : 'تأكيد الشحن'}
+                                        {transactionType === 'repay' ? 'تأكيد التسديد' :
+                                            transactionType === 'deduct' ? 'تأكيد الخصم' :
+                                                transactionType === 'set' ? 'تعيين الرصيد' :
+                                                    'تأكيد الشحن'}
                                     </Button>
                                 </DialogFooter>
                             </form>
@@ -614,10 +692,10 @@ const Users = () => {
                                             </span>
                                         </TableCell>
                                         <TableCell className="font-bold text-emerald-500">
-                                            {user.balance?.toLocaleString() || 0}
+                                            {formatCurrency(user.balance)}
                                         </TableCell>
                                         <TableCell className="font-bold text-red-500">
-                                            {user.debt?.toLocaleString() || 0}
+                                            {formatCurrency(user.debt)}
                                         </TableCell>
                                         <TableCell>{user.phone}</TableCell>
                                         <TableCell>
