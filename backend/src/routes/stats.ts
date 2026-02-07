@@ -62,6 +62,66 @@ router.get('/dashboard', authenticate, async (req, res) => {
             displayBalance = myWallet ? (myWallet.data().balance || 0) : 0;
         }
 
+        // --- NEW: Financial Breakdowns (SIMs, Games, Internet) ---
+        let totalSimsBalance = 0;
+        let totalGameCardsBalance = 0;
+        let totalInternetCardsBalance = 0;
+
+        // A. Total SIMs Balance
+        const simsSnapshot = await db.collection('sims').get();
+        console.log(`[Stats] Found ${simsSnapshot.size} SIMs`);
+
+        totalSimsBalance = simsSnapshot.docs.reduce((acc, doc) => {
+            const data = doc.data();
+            const bal = Number(data.balance);
+            // console.log(`[Stats] SIM ${doc.id} Balance: ${data.balance} -> ${bal}`);
+            return acc + (isNaN(bal) ? 0 : bal);
+        }, 0);
+        console.log(`[Stats] Total Calculated Sims Balance: ${totalSimsBalance}`);
+
+
+        // B. Cards Balance (Games vs Internet)
+        // 1. Build Price Map from Games/Packages
+        const gamesSnapshot = await db.collection('games').get();
+        const priceMap: Record<string, number> = {}; // category/name -> price
+
+        // Fetch all packages for all games
+        // Optimization: Use Promise.all
+        await Promise.all(gamesSnapshot.docs.map(async (gameDoc) => {
+            const pkgs = await gameDoc.ref.collection('packages').get();
+            pkgs.docs.forEach(pkg => {
+                const pData = pkg.data();
+                // Normalize name for lookup
+                if (pData.name) priceMap[pData.name.trim()] = Number(pData.price) || 0;
+            });
+        }));
+
+        // 2. Fetch Available Cards
+        const cardsSnapshot = await db.collection('cards').where('status', '==', 'available').get();
+
+        cardsSnapshot.docs.forEach(doc => {
+            const card = doc.data();
+            // Pricing Lookup
+            // Try explicit matching, or fallback to known patterns if pricing is missing
+            let price = 0;
+            if (card.category && priceMap[card.category.trim()]) {
+                price = priceMap[card.category.trim()];
+            }
+
+            // Categorize: Internet vs Games
+            // Heuristic: Check operator or category for "idoom", "4g", "adsl"
+            const op = (card.operator || '').toLowerCase();
+            const cat = (card.category || '').toLowerCase();
+            const isInternet = ['idoom', '4g', 'adsl', 'internet'].some(k => op.includes(k) || cat.includes(k));
+
+            if (isInternet) {
+                totalInternetCardsBalance += price;
+            } else {
+                totalGameCardsBalance += price;
+            }
+        });
+
+
         // --- KPI Calculations ---
         const totalTransactions = transactions.length;
         const totalRevenue = transactions
@@ -136,7 +196,11 @@ router.get('/dashboard', authenticate, async (req, res) => {
                 activeDealersCount,
                 failedTransactions,
                 systemBalance: displayBalance,
-                currentBalance: displayBalance
+                currentBalance: displayBalance,
+                // New Financials
+                totalSimsBalance,
+                totalGameCardsBalance,
+                totalInternetCardsBalance
             },
             geo: topLocations,
             offers: topOffers,
@@ -180,12 +244,21 @@ router.get('/financials', authenticate, async (req, res) => {
         }
 
         // 1. Fetch Related Users (Retailers)
-        let retailersQuery = db.collection('users').where('role', '==', 'retailer');
+        let retailersQuery = db.collection('users');
+
         if (role === 'wholesaler') {
-            retailersQuery = retailersQuery.where('createdBy', '==', uid);
+            // Trust strict parent-child relationship (Wholesaler only creates Retailers)
+            // This avoids issues where role might be 'Retailer' (case sensitive) or missing active status
+            retailersQuery = retailersQuery.where('createdBy', '==', uid) as any;
+        } else {
+            // Admin: Fetch all retailers specifically
+            retailersQuery = retailersQuery.where('role', '==', 'retailer') as any;
         }
+
         const retailersSnapshot = await retailersQuery.get();
         const retailers = retailersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log(`[Stats] Found ${retailers.length} retailers for ${role} ${uid}`);
+
         const retailerIds = retailers.map(u => u.id);
 
         // 2. Fetch Wallets
@@ -230,11 +303,35 @@ router.get('/financials', authenticate, async (req, res) => {
             wholesalerDebt = myWallet?.debt || 0;
             console.log(`[Stats] Resolved Debt: ${wholesalerDebt}`);
         } else {
-            // Admin sees sum of purely system funds ?? Or just sum of all wallets?
-            // Usually Admin System Balance = Sum of all wallets
+            // Admin sees sum of purely system            // Admin System Balance = Sum of all wallets
             walletsSnapshot.docs.forEach(doc => {
                 totalSystemBalance += (doc.data().balance || 0);
             });
+        }
+
+        // Calculate Split Balances (Wholesaler vs Retailer)
+        let calculatedWholesalersBalance = 0;
+        let calculatedRetailersBalance = 0;
+
+        retailers.forEach(u => {
+            const w = walletsMap.get(u.id);
+            calculatedRetailersBalance += (w?.balance || 0);
+        });
+
+        // Wholesalers = Total - Retailers (Or strictly sum wholesalers)
+        // Let's strictly sum wholesalers/admins for accuracy if possible, but map only contains retailers if we didn't fetch all users.
+        // Optimization: We fetched *all* wallets in line 205 for Admin.
+        // We need to know which wallet belongs to a wholesaler.
+        if (role === 'super_admin' || role === 'super_wholesaler') {
+            // We need user roles. We only fetched 'retailers' in step 1.
+            // Let's quick-fetch all wholesalers to be precise.
+            const wholesalersSnapshot = await db.collection('users').where('role', 'in', ['wholesaler', 'super_wholesaler', 'super_admin']).get();
+            wholesalersSnapshot.docs.forEach(doc => {
+                const w = walletsMap.get(doc.id);
+                calculatedWholesalersBalance += (w?.balance || 0);
+            });
+        } else if (role === 'wholesaler') {
+            calculatedWholesalersBalance = totalSystemBalance; // For a wholesaler, their balance is the system balance relevant to them?
         }
 
         // Retailers Balances & Low Balance Check
@@ -321,13 +418,26 @@ router.get('/financials', authenticate, async (req, res) => {
         const todayIso = new Date().toISOString().split('T')[0];
         const todayStats = dailyStats[todayIso] || { amount: 0, count: 0 };
 
+        // Final Wholesaler Balance Logic
+        let finalWholesalerBalance = 0;
+        if (role === 'wholesaler') {
+            finalWholesalerBalance = totalSystemBalance;
+        } else {
+            finalWholesalerBalance = calculatedWholesalersBalance; // For Admin, this is sum of wholesaler wallets
+            // If Admin and calculatedWholesalersBalance is 0, maybe fallback to (System - Retailers)?
+            // Only if we suspect we missed some wallets. But strictly, calculatedWholesalersBalance is correct.
+            if (calculatedWholesalersBalance === 0 && totalSystemBalance > 0) {
+                finalWholesalerBalance = totalSystemBalance - totalTotalRetailersBalance;
+            }
+        }
+
         res.json({
             // KPI Cards
             uid,
             totalSystemBalance,
             wholesalerDebt,
-            totalWholesalerBalance: totalTotalRetailersBalance, // Naming kept for compatibility or updated frontend
-            totalRetailersBalance: totalTotalRetailersBalance,  // Better name
+            totalWholesalerBalance: finalWholesalerBalance,
+            totalRetailersBalance: totalTotalRetailersBalance,
             totalRetailerDebt,
 
             // Today

@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DollarSign, TrendingUp, Users, ArrowUpRight, AlertTriangle, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -26,6 +27,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
 
 const Financials = () => {
     const { role, token } = useAuth();
+    const { t } = useLanguage();
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -96,18 +98,18 @@ const Financials = () => {
             <div className="space-y-8 pb-10">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground">المالية</h1>
-                        <p className="text-muted-foreground mt-1">لوحة القيادة المالية والتحليلات</p>
+                        <h1 className="text-3xl font-bold text-foreground">{t('fin_title')}</h1>
+                        <p className="text-muted-foreground mt-1">{t('fin_header_desc')}</p>
                     </div>
 
                     <Select value={period} onValueChange={setPeriod}>
                         <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="اختر المدة" />
+                            <SelectValue placeholder={t('fin_period_placeholder')} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="7">آخر 7 أيام</SelectItem>
-                            <SelectItem value="30">آخر 30 يوم</SelectItem>
-                            <SelectItem value="90">آخر 90 يوم</SelectItem>
+                            <SelectItem value="7">{t('fin_period_7')}</SelectItem>
+                            <SelectItem value="30">{t('fin_period_30')}</SelectItem>
+                            <SelectItem value="90">{t('fin_period_90')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -116,20 +118,20 @@ const Financials = () => {
                 <div className="grid gap-4 md:grid-cols-3">
                     <Card className="glass-card">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-sm font-medium">رصيدك الحالي</CardTitle>
+                            <CardTitle className="text-sm font-medium">{t('fin_current_balance')}</CardTitle>
                             <Wallet className="h-4 w-4 text-emerald-500" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-emerald-500">
                                 {formatCurrency(stats.totalSystemBalance)} د.ج
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">الرصيد المتوفر في محفظتك</p>
+                            <p className="text-xs text-muted-foreground mt-1">{t('fin_available_balance')}</p>
                             {stats.uid && <p className="text-[10px] text-muted-foreground/50 mt-1 font-mono text-left" dir="ltr">{stats.uid}</p>}
 
                             {stats.wholesalerDebt !== undefined && (
                                 <div className="mt-4 pt-4 border-t border-dashed">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-sm font-medium text-red-500">الديون التي عليك</p>
+                                        <p className="text-sm font-medium text-red-500">{t('fin_debt')}</p>
                                         <div className="flex items-center gap-1 text-red-600 font-bold">
                                             <AlertTriangle className="w-3 h-3" />
                                             <span>{formatCurrency(stats.wholesalerDebt)} د.ج</span>
@@ -142,27 +144,29 @@ const Financials = () => {
 
                     <Card className="glass-card">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-sm font-medium">أرصدة تجار التجزئة</CardTitle>
+                            <CardTitle className="text-sm font-medium">{t('fin_retailers_balance')}</CardTitle>
                             <Users className="h-4 w-4 text-blue-500" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-blue-600">
                                 {formatCurrency(stats.totalRetailersBalance)} د.ج
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">إجمالي الأرصدة المتوفرة لديهم</p>
+                            <p className="text-xs text-muted-foreground mt-1">{t('fin_retailers_balance_desc')}</p>
                         </CardContent>
                     </Card>
 
                     <Card className="glass-card">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-sm font-medium">حجم تداولات الفترة</CardTitle>
+                            <CardTitle className="text-sm font-medium">{t('fin_volume')}</CardTitle>
                             <TrendingUp className="h-4 w-4 text-purple-500" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-purple-600">
                                 {formatCurrency(stats.chartData?.reduce((acc: number, curr: any) => acc + curr.amount, 0) || 0)} د.ج
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">في آخر {period} يوم</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {period === "7" ? t('fin_period_7') : period === "30" ? t('fin_period_30') : t('fin_period_90')}
+                            </p>
                         </CardContent>
                     </Card>
                 </div>
@@ -175,9 +179,9 @@ const Financials = () => {
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <AlertTriangle className="w-4 h-4 text-red-500" />
-                                أرصدة منخفضة
+                                {t('fin_low_balance')}
                             </CardTitle>
-                            <CardDescription>تجار بحاجة لإعادة شحن (أقل من 5000 د.ج)</CardDescription>
+                            <CardDescription>{t('fin_low_balance_desc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -201,8 +205,8 @@ const Financials = () => {
                     {/* Active Retailers (4 cols) - Now Second (Left in RTL) */}
                     <Card className="lg:col-span-4 glass-card">
                         <CardHeader>
-                            <CardTitle>الأكثر نشاطاً</CardTitle>
-                            <CardDescription>أفضل تجار التجزئة من حيث حجم التعاملات</CardDescription>
+                            <CardTitle>{t('fin_active_retailers')}</CardTitle>
+                            <CardDescription>{t('fin_active_retailers_desc')}</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
@@ -234,8 +238,8 @@ const Financials = () => {
                 {/* 3. Bottom Section: Activity Chart */}
                 <Card className="glass-card">
                     <CardHeader>
-                        <CardTitle>النشاط المالي</CardTitle>
-                        <CardDescription>حجم التعاملات اليومية خلال الفترة المحددة</CardDescription>
+                        <CardTitle>{t('fin_chart_title')}</CardTitle>
+                        <CardDescription>{t('fin_chart_desc')}</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[350px]">
                         <ResponsiveContainer width="100%" height="100%">

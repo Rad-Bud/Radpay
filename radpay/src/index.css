@@ -7,42 +7,43 @@
 @layer base {
   :root {
     /* Tashil Pay Design System - Professional Fintech */
-    --background: 222 47% 6%;
-    --foreground: 210 40% 98%;
+    /* Light Mode Values */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
 
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 222 47% 8%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Primary - Emerald Green (Trust, Growth, Money) */
+    /* Primary - Emerald Green */
     --primary: 160 84% 39%;
-    --primary-foreground: 222 47% 6%;
+    --primary-foreground: 210 40% 98%;
     --primary-glow: 160 84% 50%;
 
     /* Secondary - Deep Navy */
-    --secondary: 222 47% 12%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
 
-    /* Muted - Subtle grays */
-    --muted: 222 30% 15%;
-    --muted-foreground: 215 20% 55%;
+    /* Muted */
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    /* Accent - Golden */
-    --accent: 45 93% 58%;
-    --accent-foreground: 222 47% 6%;
+    /* Accent */
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11.2%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 222 30% 18%;
-    --input: 222 30% 18%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
     --ring: 160 84% 39%;
 
     --radius: 0.75rem;
 
-    /* Custom Tashil Colors */
+    /* Custom Tashil Colors - Keep consistent */
     --tashil-emerald: 160 84% 39%;
     --tashil-emerald-light: 160 70% 50%;
     --tashil-navy: 222 47% 11%;
@@ -53,30 +54,46 @@
     --tashil-warning: 38 92% 50%;
     --tashil-info: 199 89% 48%;
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(160 84% 39%), hsl(160 70% 50%));
-    --gradient-hero: linear-gradient(180deg, hsl(222 47% 8%) 0%, hsl(222 47% 4%) 100%);
-    --gradient-card: linear-gradient(145deg, hsl(222 47% 10%), hsl(222 47% 7%));
-    --gradient-gold: linear-gradient(135deg, hsl(45 93% 58%), hsl(38 92% 50%));
-
-    /* Shadows */
-    --shadow-glow: 0 0 40px hsl(160 84% 39% / 0.15);
-    --shadow-card: 0 8px 32px hsl(222 47% 4% / 0.4);
-    --shadow-elevated: 0 20px 60px hsl(222 47% 4% / 0.6);
-
-    --sidebar-background: 222 47% 8%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 160 84% 39%;
-    --sidebar-primary-foreground: 222 47% 6%;
-    --sidebar-accent: 222 47% 15%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 30% 18%;
-    --sidebar-ring: 160 84% 39%;
+    /* Shadows - Light */
+    --shadow-glow: 0 0 20px hsl(160 84% 39% / 0.15);
+    --shadow-card: 0 4px 12px hsl(222 47% 11% / 0.1);
+    --shadow-elevated: 0 10px 30px hsl(222 47% 11% / 0.15);
   }
 
   .dark {
+    /* Dark Mode Values (Overrides) */
     --background: 222 47% 6%;
     --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 160 84% 39%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 47% 12%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 30% 15%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 222 47% 15%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 160 84% 39%;
+
+    /* Shadows - Dark */
+    --shadow-glow: 0 0 40px hsl(160 84% 39% / 0.15);
+    --shadow-card: 0 8px 32px hsl(222 47% 4% / 0.4);
+    --shadow-elevated: 0 20px 60px hsl(222 47% 4% / 0.6);
   }
 }
 
@@ -86,7 +103,7 @@
   }
 
   html {
-    direction: rtl;
+    /* Direction is handled dynamically by LanguageContext */
   }
 
   body {
@@ -145,7 +162,7 @@
   .gradient-border {
     position: relative;
   }
-  
+
   .gradient-border::before {
     content: '';
     position: absolute;
@@ -161,18 +178,24 @@
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
   }
+
   50% {
     box-shadow: 0 0 40px hsl(var(--primary) / 0.5);
   }
@@ -183,6 +206,7 @@
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -193,6 +217,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }

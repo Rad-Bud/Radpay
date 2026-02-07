@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Smartphone, CheckCircle2, Wifi, Router, Gamepad2, Ticket, Wallet, Eye, EyeOff, Tag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Operator configuration matching the design
 const OPERATORS = [
@@ -63,6 +64,7 @@ interface Offer {
 
 const RechargeBalance = () => {
     const { user } = useAuth();
+    const { t } = useLanguage();
     // Phone State
     const [selectedOperator, setSelectedOperator] = useState<string | null>(null);
     const [rechargeType, setRechargeType] = useState<'flexy' | 'offers'>('flexy');
@@ -166,7 +168,7 @@ const RechargeBalance = () => {
         e.preventDefault();
 
         if (!selectedOperator) {
-            toast.error("يرجى اختيار المتعامل");
+            toast.error(t('recharge_no_operator'));
             return;
         }
         if (phoneNumber.length < 9) {
@@ -273,15 +275,15 @@ const RechargeBalance = () => {
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground">بيع رصيد</h1>
-                        <p className="text-muted-foreground mt-1">شحن فليكسي أو تفعيل عروض</p>
+                        <h1 className="text-3xl font-bold text-foreground">{t('recharge_title')}</h1>
+                        <p className="text-muted-foreground mt-1">{t('recharge_header_desc')}</p>
                     </div>
 
                     {/* Current Balance Card - Matching Design */}
                     <div className="bg-[#E6F4F1] dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-400 p-4 rounded-xl w-64 border border-emerald-100 dark:border-emerald-800/50 relative overflow-hidden group">
                         <div className="relative z-10 flex flex-col h-full justify-between">
                             <div className="flex justify-between items-start">
-                                <span className="text-sm font-medium opacity-80">رصيدك الحالي</span>
+                                <span className="text-sm font-medium opacity-80">{t('recharge_current_balance')}</span>
                                 <button
                                     onClick={() => setShowBalance(!showBalance)}
                                     className="p-1 hover:bg-emerald-200/50 dark:hover:bg-emerald-900/50 rounded-full transition-colors cursor-pointer z-20"
@@ -346,12 +348,12 @@ const RechargeBalance = () => {
                         <Card className="border-none shadow-md bg-card/50 backdrop-blur-sm">
                             <CardContent className="p-8 space-y-8">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <h2 className="text-xl font-bold">بيانات العملية</h2>
+                                    <h2 className="text-xl font-bold">{t('recharge_data_title')}</h2>
                                 </div>
 
                                 <form onSubmit={handlePhoneSubmit} className="space-y-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-muted-foreground">رقم الهاتف</label>
+                                        <label className="text-sm font-medium text-muted-foreground">{t('recharge_phone_label')}</label>
                                         <Input
                                             type="tel"
                                             placeholder="0X XX XX XX XX"
@@ -381,7 +383,7 @@ const RechargeBalance = () => {
                                             )}
                                             disabled={isRecharging}
                                         >
-                                            فليكسي (مبلغ حر)
+                                            {t('recharge_flexy')}
                                         </button>
                                         <button
                                             type="button"
@@ -394,7 +396,7 @@ const RechargeBalance = () => {
                                             )}
                                             disabled={isRecharging}
                                         >
-                                            عروض (Internet/Calls)
+                                            {t('recharge_offers')}
                                         </button>
                                     </div>
 
@@ -402,7 +404,7 @@ const RechargeBalance = () => {
                                     {rechargeType === 'flexy' ? (
                                         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium text-muted-foreground">المبلغ (د.ج)</label>
+                                                <label className="text-sm font-medium text-muted-foreground">{t('recharge_amount_label')}</label>
                                                 <Input
                                                     type="number"
                                                     placeholder="أدخل المبلغ"
@@ -432,7 +434,7 @@ const RechargeBalance = () => {
                                     ) : (
                                         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                             <label className="text-sm font-medium text-muted-foreground flex items-center justify-between">
-                                                <span>اختر العرض</span>
+                                                <span>{t('recharge_choose_offer')}</span>
                                                 {selectedOperator && (
                                                     <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                                                         {filteredOffers.length} عروض متاحة
@@ -442,7 +444,7 @@ const RechargeBalance = () => {
 
                                             {!selectedOperator ? (
                                                 <div className="text-center p-8 border-2 border-dashed rounded-xl text-muted-foreground bg-muted/20">
-                                                    يرجى اختيار المتعامل أولاً لعرض العروض المتاحة
+                                                    {t('recharge_no_operator')}
                                                 </div>
                                             ) : filteredOffers.length === 0 ? (
                                                 <div className="text-center p-8 border-2 border-dashed rounded-xl text-muted-foreground bg-muted/20">
@@ -497,7 +499,7 @@ const RechargeBalance = () => {
                                             </>
                                         ) : (
                                             <>
-                                                {rechargeType === 'flexy' ? 'تأكيد العملية' : 'تفعيل العرض'}
+                                                {rechargeType === 'flexy' ? t('recharge_submit_flexy') : t('recharge_submit_offer')}
                                                 {rechargeType === 'offers' && selectedOffer && ` (${selectedOffer.price} د.ج)`}
                                             </>
                                         )}
@@ -511,7 +513,7 @@ const RechargeBalance = () => {
                     <section className="space-y-6 pt-10 border-t border-dashed border-border/50">
                         <div className="flex items-center gap-2">
                             <Wifi className="w-6 h-6 text-blue-500" />
-                            <h2 className="text-2xl font-bold">شحن الإنترنت</h2>
+                            <h2 className="text-2xl font-bold">{t('recharge_internet_title')}</h2>
                         </div>
 
                         <Card className="border border-blue-500/10 shadow-sm bg-card/50 backdrop-blur-sm overflow-hidden relative">
@@ -525,9 +527,9 @@ const RechargeBalance = () => {
                                 </div>
 
                                 <div className="space-y-3 max-w-md">
-                                    <h3 className="text-2xl font-bold text-foreground">خدمة شحن الإنترنت</h3>
+                                    <h3 className="text-2xl font-bold text-foreground">{t('recharge_internet_title')}</h3>
                                     <p className="text-lg text-blue-600 dark:text-blue-400 font-medium">
-                                        خدمة ستتاح قريباً بشكل رائع
+                                        {t('recharge_soon')}
                                     </p>
                                     <p className="text-sm text-muted-foreground leading-relaxed">
                                         نعمل على توفير تجربة شحن سلسة وسريعة لجميع اشتراكات الإنترنت (Idoom, 4G, Fiber).
@@ -547,7 +549,7 @@ const RechargeBalance = () => {
                     <section className="space-y-6 pt-10 border-t border-dashed border-border/50">
                         <div className="flex items-center gap-2">
                             <Gamepad2 className="w-6 h-6 text-purple-500" />
-                            <h2 className="text-2xl font-bold">شحن الألعاب</h2>
+                            <h2 className="text-2xl font-bold">{t('recharge_games_title')}</h2>
                         </div>
 
                         {loadingGames ? (
@@ -623,7 +625,7 @@ const RechargeBalance = () => {
                                             onClick={handleGameSubmit}
                                             className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700"
                                         >
-                                            شراء البطاقة ({selectedPackage.price.toLocaleString()} د.ج)
+                                            {t('recharge_buy_card')} ({selectedPackage.price.toLocaleString()} د.ج)
                                         </Button>
                                     </div>
                                 )}

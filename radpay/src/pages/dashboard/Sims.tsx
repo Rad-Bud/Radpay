@@ -6,16 +6,20 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Smartphone, Signal, Power, Search, Settings, RefreshCw, Wallet, CheckCircle, Clock } from "lucide-react";
+import { Plus, Edit, Trash2, Smartphone, Signal, Power, Search, Settings, RefreshCw, Wallet, CheckCircle, Clock, AlertTriangle, Scale } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { auth } from "@/lib/firebase";
 
 const backendUrl = "http://localhost:3000/api";
 
 const Sims = () => {
+    const { t } = useLanguage();
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
 
     const [sims, setSims] = useState<any[]>([]);
     const [stats, setStats] = useState({ completed: 0, pending: 0 });
+    const [financials, setFinancials] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedSim, setSelectedSim] = useState<any>(null);
 
@@ -24,7 +28,8 @@ const Sims = () => {
         phone: "",
         pin: "",
         port: "",
-        balance: ""
+        balance: "",
+        status: "active"
     });
 
     // Settings State
@@ -35,9 +40,39 @@ const Sims = () => {
         ooredoo: ""
     });
 
+    // Helper for Authenticated Fetch
+    const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+        try {
+            const user = auth.currentUser;
+            if (user) {
+                const token = await user.getIdToken();
+                options.headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${token}`
+                };
+            }
+            return fetch(url, options);
+        } catch (error) {
+            console.error("Auth Error:", error);
+            throw error;
+        }
+    };
+
+    useEffect(() => {
+        const init = async () => {
+            // Wait a moment for auth if needed, but usually auth.currentUser is ready or we handle it
+            // We can retry if no user? For now assume user is logged in if accessing dashboard
+            await fetchSims();
+            await fetchStats();
+            await fetchFinancials();
+            await fetchSettings(); // Also fetch settings
+        };
+        init();
+    }, []);
+
     const fetchSettings = async () => {
         try {
-            const res = await fetch(`${backendUrl}/settings/operators`);
+            const res = await fetchWithAuth(`${backendUrl}/settings/operators`);
             if (res.ok) {
                 const data = await res.json();
                 setUssdConfig({
@@ -59,7 +94,7 @@ const Sims = () => {
     const handleSettingsSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const res = await fetch(`${backendUrl}/settings/operators`, {
+            const res = await fetchWithAuth(`${backendUrl}/settings/operators`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(ussdConfig)
@@ -81,14 +116,23 @@ const Sims = () => {
     const [operatorFilter, setOperatorFilter] = useState("all");
     const [dateFilter, setDateFilter] = useState("all");
 
-    useEffect(() => {
-        fetchSims();
-        fetchStats();
-    }, []);
+    const fetchFinancials = async () => {
+        try {
+            const res = await fetchWithAuth(`${backendUrl}/stats/financials?days=30`);
+            if (res.ok) {
+                const data = await res.json();
+                setFinancials(data);
+            } else {
+                console.error("Financials fetch failed", res.status);
+            }
+        } catch (error) {
+            console.error("Failed to fetch financials", error);
+        }
+    };
 
     const fetchStats = async () => {
         try {
-            const res = await fetch(`${backendUrl}/stats/transactions`);
+            const res = await fetchWithAuth(`${backendUrl}/stats/transactions`);
             if (res.ok) {
                 const data = await res.json();
                 setStats(data);
@@ -100,7 +144,7 @@ const Sims = () => {
 
     const fetchSims = async () => {
         try {
-            const res = await fetch(`${backendUrl}/sims`);
+            const res = await fetchWithAuth(`${backendUrl}/sims`);
             if (res.ok) {
                 const data = await res.json();
                 setSims(data);
@@ -120,7 +164,7 @@ const Sims = () => {
     const handleAddSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const res = await fetch(`${backendUrl}/sims`, {
+            const res = await fetchWithAuth(`${backendUrl}/sims`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
@@ -153,7 +197,7 @@ const Sims = () => {
 
         try {
             console.log("Sending USSD request...");
-            const res = await fetch(`${backendUrl}/gateway/ussd`, {
+            const res = await fetchWithAuth(`${backendUrl}/gateway/ussd`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ slot: sim.id, code })
@@ -189,7 +233,7 @@ const Sims = () => {
         e.preventDefault();
         if (!selectedSim) return;
         try {
-            const res = await fetch(`${backendUrl}/sims/${selectedSim.id}`, {
+            const res = await fetchWithAuth(`${backendUrl}/sims/${selectedSim.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
@@ -210,7 +254,7 @@ const Sims = () => {
     const handleDelete = async (id: string) => {
         if (!confirm("هل أنت متأكد من حذف هذه الشريحة؟")) return;
         try {
-            await fetch(`${backendUrl}/sims/${id}`, { method: 'DELETE' });
+            await fetchWithAuth(`${backendUrl}/sims/${id}`, { method: 'DELETE' });
             fetchSims();
         } catch (error) {
             alert("فشل الحذف");
@@ -223,7 +267,7 @@ const Sims = () => {
         if (!confirm(`هل أنت متأكد من ${actionText} هذه الشريحة؟`)) return;
 
         try {
-            const res = await fetch(`${backendUrl}/sims/${sim.id}`, {
+            const res = await fetchWithAuth(`${backendUrl}/sims/${sim.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
@@ -276,6 +320,7 @@ const Sims = () => {
     return (
         <DashboardLayout>
             <div className="space-y-6">
+                {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                         <h1 className="text-3xl font-bold">إدارة الشرائح (SIMs)</h1>
@@ -406,7 +451,7 @@ const Sims = () => {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-card p-4 rounded-lg border border-border flex flex-row items-center justify-between shadow-sm overflow-hidden relative">
                         <div className="flex-1 min-w-0 z-10">
                             <p className="text-sm text-muted-foreground truncate">إجمالي رصيد الشرائح</p>
@@ -440,6 +485,90 @@ const Sims = () => {
                         </div>
                         <div className="p-3 bg-amber-500/10 rounded-full flex-shrink-0 mr-4">
                             <Clock className="w-6 h-6 text-amber-600" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- NEW SECTION: Large Financial Analysis Card --- */}
+                <div className="bg-card rounded-xl border border-border shadow-sm p-6 mb-6">
+                    <div className="flex flex-col lg:flex-row gap-8">
+
+                        {/* 1. Left Side (RTL): Per Operator Breakdown */}
+                        <div className="lg:w-1/3 space-y-4 border-l border-border/50 pl-0 lg:pl-8">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <Smartphone className="w-5 h-5 text-primary" />
+                                {t('sims_operator_balances')}
+                            </h3>
+
+                            {['mobilis', 'djezzy', 'ooredoo'].map(op => {
+                                const total = sims
+                                    .filter(s => s.operator === op)
+                                    .reduce((acc, s) => acc + (parseFloat(s.balance) || 0), 0);
+
+                                return (
+                                    <div key={op} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-3 h-3 rounded-full ${getOperatorColor(op)}`} />
+                                            <span className="capitalize font-medium">{op}</span>
+                                        </div>
+                                        <span className="font-bold text-lg">{total.toLocaleString()} <span className="text-xs text-muted-foreground">د.ج</span></span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 2. Right Side: Wholesaler vs Retailer vs SIMs Analysis */}
+                        <div className="lg:w-2/3 flex flex-col justify-between">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Wholesaler Balance */}
+                                <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                                    <p className="text-sm text-muted-foreground mb-1">{t('sims_wholesaler_balance')}</p>
+                                    <h2 className="text-3xl font-bold text-blue-600">
+                                        {financials?.totalWholesalerBalance?.toLocaleString() || 0} <span className="text-sm">د.ج</span>
+                                    </h2>
+                                </div>
+
+                                {/* Retailer Balance */}
+                                <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
+                                    <p className="text-sm text-muted-foreground mb-1">{t('sims_retailer_balance')}</p>
+                                    <h2 className="text-3xl font-bold text-purple-600">
+                                        {financials?.totalRetailersBalance?.toLocaleString() || 0} <span className="text-sm">د.ج</span>
+                                    </h2>
+                                </div>
+                            </div>
+
+                            {/* Aggregated Logic & Alert */}
+                            {(() => {
+                                const totalSimsBalance = sims.reduce((acc, s) => acc + (parseFloat(s.balance) || 0), 0);
+                                const totalSystemHoldings = (financials?.totalWholesalerBalance || 0) + (financials?.totalRetailersBalance || 0);
+                                const deficit = totalSystemHoldings - totalSimsBalance;
+                                const hasDeficit = deficit > 0; // If System (People's money) > Real SIM Money => DEFICIT
+
+                                return (
+                                    <div className={`mt-6 p-4 rounded-xl border flex items-start gap-4 transition-all duration-300 ${hasDeficit ? 'bg-red-500/10 border-red-500/50' : 'bg-emerald-500/10 border-emerald-500/50'}`}>
+                                        <div className={`p-2 rounded-full ${hasDeficit ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                            {hasDeficit ? <AlertTriangle className="w-5 h-5" /> : <Scale className="w-5 h-5" />}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className={`font-bold text-lg ${hasDeficit ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                {hasDeficit ? t('sims_system_deficit') : t('dash_safe_stable')}
+                                            </h4>
+                                            <p className="text-sm text-foreground/80 mt-1">
+                                                {hasDeficit
+                                                    ? `${t('sims_deficit_alert')} (${deficit.toLocaleString()} د.ج)`
+                                                    : "رصيد الشرائح كافٍ لتغطية أرصدة جميع المستخدمين."
+                                                }
+                                            </p>
+
+                                            <div className="mt-3 text-xs flex gap-4 text-muted-foreground font-mono">
+                                                <span>Total SIMs: {totalSimsBalance.toLocaleString()}</span>
+                                                <span>vs</span>
+                                                <span>System: {totalSystemHoldings.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -481,72 +610,6 @@ const Sims = () => {
                         </Select>
                     </div>
                 </div>
-
-                {/* Edit Modal */}
-                <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                    <DialogContent className="sm:max-w-[500px] text-right" dir="rtl">
-                        <DialogHeader className="text-right">
-                            <DialogTitle>تعديل بيانات الشريحة</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleEditSubmit} className="space-y-4 py-4">
-                            {/* Same fields as add */}
-                            <div className="space-y-2">
-                                <Label>المتعامل</Label>
-                                <Select
-                                    onValueChange={(val) => setFormData(prev => ({ ...prev, operator: val }))}
-                                    defaultValue={formData.operator}
-                                >
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="mobilis">موبيليس (Mobilis)</SelectItem>
-                                        <SelectItem value="djezzy">جيزي (Djezzy)</SelectItem>
-                                        <SelectItem value="ooredoo">أوريدو (Ooredoo)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="phone">رقم الهاتف</Label>
-                                <Input
-                                    id="phone"
-                                    value={formData.phone}
-                                    onChange={handleInputChange}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="balance">الرصيد الحالي (د.ج)</Label>
-                                <Input
-                                    id="balance"
-                                    type="number"
-                                    value={formData.balance}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="pin">PIN Code</Label>
-                                    <Input
-                                        id="pin"
-                                        value={formData.pin}
-                                        onChange={handleInputChange}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="port">رقم المنفذ / IP</Label>
-                                    <Input
-                                        id="port"
-                                        value={formData.port}
-                                        onChange={handleInputChange}
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button type="submit">تحديث</Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
 
                 {/* Table */}
                 <div className="rounded-lg border bg-card">
@@ -619,7 +682,72 @@ const Sims = () => {
                     </Table>
                 </div>
             </div>
-        </DashboardLayout >
+
+            {/* Edit Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent className="sm:max-w-[500px] text-right" dir="rtl">
+                    <DialogHeader className="text-right">
+                        <DialogTitle>تعديل بيانات الشريحة</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEditSubmit} className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>المتعامل</Label>
+                            <Select
+                                onValueChange={(val) => setFormData(prev => ({ ...prev, operator: val }))}
+                                defaultValue={formData.operator}
+                            >
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="mobilis">موبيليس (Mobilis)</SelectItem>
+                                    <SelectItem value="djezzy">جيزي (Djezzy)</SelectItem>
+                                    <SelectItem value="ooredoo">أوريدو (Ooredoo)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="phone">رقم الهاتف</Label>
+                            <Input
+                                id="phone"
+                                value={formData.phone}
+                                onChange={handleInputChange}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="balance">الرصيد الحالي (د.ج)</Label>
+                            <Input
+                                id="balance"
+                                type="number"
+                                value={formData.balance}
+                                onChange={handleInputChange}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="pin">PIN Code</Label>
+                                <Input
+                                    id="pin"
+                                    value={formData.pin}
+                                    onChange={handleInputChange}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="port">رقم المنفذ / IP</Label>
+                                <Input
+                                    id="port"
+                                    value={formData.port}
+                                    onChange={handleInputChange}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="submit">تحديث</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+        </DashboardLayout>
     );
 };
 

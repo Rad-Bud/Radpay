@@ -6,9 +6,11 @@ import {
 } from 'recharts';
 import {
     Wallet, Users, AlertTriangle, TrendingUp, TrendingDown,
-    MapPin, Clock, Smartphone, Briefcase, Activity, ArrowUpRight
+    MapPin, Clock, Smartphone, Briefcase, Activity, ArrowUpRight,
+    Wifi, Gamepad
 } from "lucide-react";
 import { auth } from "../../lib/firebase";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -17,6 +19,7 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 export default function AdvancedDashboard() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const { t } = useLanguage();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -43,8 +46,8 @@ export default function AdvancedDashboard() {
         fetchData();
     }, []);
 
-    if (loading) return <div className="p-8 text-center">جاري تحميل البيانات...</div>;
-    if (!data) return <div className="p-8 text-center text-red-500">فشل تحميل البيانات</div>;
+    if (loading) return <div className="p-8 text-center">{t('dash_loading')}</div>;
+    if (!data) return <div className="p-8 text-center text-red-500">{t('dash_error')}</div>;
 
     const { kpi, geo, offers, time, dealers } = data;
 
@@ -52,29 +55,45 @@ export default function AdvancedDashboard() {
         <div className="space-y-6" dir="rtl">
 
             {/* 1. KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <KPICard
-                    title="إجمالي العمليات اليوم"
+                    title={t('dash_total_transactions')}
                     value={kpi.totalTransactions}
                     icon={<Activity className="text-blue-500" />}
                     trend="+12%" // Mock trend
                 />
                 <KPICard
-                    title="إجمالي الإيرادات"
+                    title={t('dash_total_revenue')}
                     value={`${kpi.totalRevenue.toLocaleString()} د.ج`}
                     icon={<Wallet className="text-green-500" />}
                     trend="+5%"
                 />
                 <KPICard
-                    title="المكاتب النشطة"
+                    title={t('dash_active_dealers')}
                     value={kpi.activeDealersCount}
                     icon={<Users className="text-purple-500" />}
                     trend="+2"
                 />
+
+                {/* Financial Breakdowns */}
                 <KPICard
-                    title="الرصيد الحالي"
-                    value={`${kpi.currentBalance?.toLocaleString() || 0} د.ج`}
-                    icon={<Wallet className="text-blue-500" />}
+                    title="رصيد الشرائح (SIMs)"
+                    value={`${kpi.totalSimsBalance?.toLocaleString() || 0} د.ج`}
+                    icon={<Smartphone className="text-emerald-600" />}
+                    trend=""
+                    isNegative={false}
+                />
+                <KPICard
+                    title="رصيد بطاقات الألعاب"
+                    value={`${kpi.totalGameCardsBalance?.toLocaleString() || 0} د.ج`}
+                    icon={<Gamepad className="text-amber-500" />}
+                    trend=""
+                    isNegative={false}
+                />
+                <KPICard
+                    title="رصيد بطاقات الإنترنت"
+                    value={`${kpi.totalInternetCardsBalance?.toLocaleString() || 0} د.ج`}
+                    icon={<Wifi className="text-blue-600" />}
                     trend=""
                     isNegative={false}
                 />
@@ -87,7 +106,7 @@ export default function AdvancedDashboard() {
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-bold flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-primary" />
-                            أكثر البلديات نشاطاً
+                            {t('dash_geo_title')}
                         </h3>
                     </div>
                     <div className="h-[300px]">
@@ -98,7 +117,7 @@ export default function AdvancedDashboard() {
                                 <YAxis />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                    formatter={(value: any) => [`${value} د.ج`, "الإيرادات"]}
+                                    formatter={(value: any) => [`${value} د.ج`, t('dash_geo_revenue')]}
                                 />
                                 <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                             </BarChart>
@@ -110,7 +129,7 @@ export default function AdvancedDashboard() {
                 <div className="bg-card border rounded-xl p-6 shadow-sm">
                     <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                         <Smartphone className="w-5 h-5 text-primary" />
-                        العروض الأكثر طلباً
+                        {t('dash_offers_title')}
                     </h3>
                     <div className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -147,7 +166,7 @@ export default function AdvancedDashboard() {
             <div className="bg-card border rounded-xl p-6 shadow-sm">
                 <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-primary" />
-                    تحليل النشاط الزمني (أوقات الذروة)
+                    {t('dash_time_title')}
                 </h3>
                 <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -161,7 +180,7 @@ export default function AdvancedDashboard() {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} />
                             <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
                             <YAxis />
-                            <Tooltip labelFormatter={(h) => `الساعة ${h}:00`} />
+                            <Tooltip labelFormatter={(h) => `${t('dash_time_tooltip')} ${h}:00`} />
                             <Area type="monotone" dataKey="count" stroke="#10b981" fillOpacity={1} fill="url(#colorCount)" />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -173,7 +192,7 @@ export default function AdvancedDashboard() {
                 <div className="bg-card border rounded-xl p-6 shadow-sm">
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                         <Briefcase className="w-5 h-5 text-primary" />
-                        أفضل المتعاملين أداءً
+                        {t('dash_dealers_title')}
                     </h3>
                     <div className="space-y-4">
                         {dealers.map((dealer: any, idx: number) => (
@@ -199,20 +218,20 @@ export default function AdvancedDashboard() {
                 <div className="bg-card border rounded-xl p-6 shadow-sm">
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                         <Activity className="w-5 h-5 text-primary" />
-                        حالة النظام المالية
+                        {t('dash_system_health')}
                     </h3>
                     <div className="grid grid-cols-1 gap-4">
                         <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-400 rounded-xl text-white">
-                            <p className="text-blue-100 text-sm">إجمالي الأرصدة في النظام</p>
+                            <p className="text-blue-100 text-sm">{t('dash_system_balance')}</p>
                             <h2 className="text-3xl font-bold mt-2">{kpi.systemBalance.toLocaleString()} د.ج</h2>
                             <div className="mt-4 flex gap-2">
-                                <span className="bg-white/20 px-2 py-1 rounded text-xs">آمن ومستقر</span>
+                                <span className="bg-white/20 px-2 py-1 rounded text-xs">{t('dash_safe_stable')}</span>
                             </div>
                         </div>
 
                         {/* Placeholder for SIM Balances - requires fetching SIMs separatly or passing them */}
                         <div className="p-4 border border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-400">
-                            تنبيهات الأرصدة المنخفضة ستظهر هنا
+                            {t('dash_low_balance_alert')}
                         </div>
                     </div>
                 </div>
@@ -223,6 +242,7 @@ export default function AdvancedDashboard() {
 }
 
 function KPICard({ title, value, icon, trend, isNegative }: any) {
+    const { t } = useLanguage();
     return (
         <div className="bg-card border p-6 rounded-xl shadow-sm flex flex-col justify-between">
             <div className="flex justify-between items-start">
@@ -239,7 +259,7 @@ function KPICard({ title, value, icon, trend, isNegative }: any) {
                     {trend.startsWith('-') ? <TrendingDown className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1" />}
                     {trend}
                 </span>
-                <span className="text-muted-foreground mr-1">مقارنة بالأمس</span>
+                <span className="text-muted-foreground mr-1">{t('dash_vs_yesterday')}</span>
             </div>
         </div>
     );

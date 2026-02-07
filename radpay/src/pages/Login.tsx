@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,13 @@ const Login = () => {
                         <Button type="submit" className="w-full btn-primary-glow font-bold">
                             تسجيل الدخول
                         </Button>
+
+                        <div className="text-center text-sm pt-2">
+                            ليس لديك حساب؟{" "}
+                            <Link to="/signup" className="text-primary hover:underline font-semibold">
+                                إنشاء حساب جديد
+                            </Link>
+                        </div>
                     </form>
                 </CardContent>
             </Card>
