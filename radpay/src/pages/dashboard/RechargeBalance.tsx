@@ -514,65 +514,33 @@ const RechargeBalance = () => {
                             <h2 className="text-2xl font-bold">شحن الإنترنت</h2>
                         </div>
 
-                        <form onSubmit={handleInternetSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                {INTERNET_OPERATORS.map((op) => {
-                                    const isSelected = selectedInternetOp === op.id;
-                                    return (
-                                        <div
-                                            key={op.id}
-                                            onClick={() => setSelectedInternetOp(op.id)}
-                                            className={cn(
-                                                "cursor-pointer relative bg-card rounded-2xl p-6 flex flex-col items-center justify-center gap-4 transition-all duration-200 border-2 h-40",
-                                                isSelected ? "border-blue-500 ring-2 ring-blue-500/20" : "border-border hover:border-border/80"
-                                            )}
-                                        >
-                                            <div className={cn(
-                                                "w-12 h-12 rounded-full flex items-center justify-center shadow-md",
-                                                op.color,
-                                                isSelected ? "scale-110 text-white" : "bg-secondary text-foreground"
-                                            )}>
-                                                <op.icon className="w-6 h-6" />
-                                            </div>
-                                            <span className="font-bold text-lg">{op.name}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                        <Card className="border border-blue-500/10 shadow-sm bg-card/50 backdrop-blur-sm overflow-hidden relative">
+                            {/* Decorative Elements */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl -ml-16 -mb-16 pointer-events-none"></div>
 
-                            <Card className="border-none shadow-md bg-card/50 backdrop-blur-sm">
-                                <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-muted-foreground">رقم الهاتف / الشريحة</label>
-                                        <Input
-                                            type="text"
-                                            placeholder="أدخل الرقم"
-                                            className="h-14 text-lg bg-background/50 border-input rounded-xl"
-                                            value={internetNumber}
-                                            onChange={(e) => setInternetNumber(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-muted-foreground">المبلغ (د.ج)</label>
-                                        <Input
-                                            type="number"
-                                            placeholder="أدخل المبلغ"
-                                            className="h-14 text-lg bg-background/50 border-input rounded-xl"
-                                            value={internetAmount}
-                                            onChange={(e) => setInternetAmount(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <Button
-                                            type="submit"
-                                            className="w-full h-14 text-lg font-bold rounded-xl bg-blue-600 hover:bg-blue-700"
-                                        >
-                                            تأكيد شحن الإنترنت
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </form>
+                            <CardContent className="p-12 flex flex-col items-center justify-center text-center space-y-6 relative z-10">
+                                <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center shadow-inner mb-2 ring-1 ring-blue-500/20">
+                                    <Router className="w-10 h-10 text-blue-600 dark:text-blue-400 animate-pulse" />
+                                </div>
+
+                                <div className="space-y-3 max-w-md">
+                                    <h3 className="text-2xl font-bold text-foreground">خدمة شحن الإنترنت</h3>
+                                    <p className="text-lg text-blue-600 dark:text-blue-400 font-medium">
+                                        خدمة ستتاح قريباً بشكل رائع
+                                    </p>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                        نعمل على توفير تجربة شحن سلسة وسريعة لجميع اشتراكات الإنترنت (Idoom, 4G, Fiber).
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-2 mt-4">
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                        قريباً
+                                    </span>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </section>
 
                     {/* SECTION 3: Games Recharge */}

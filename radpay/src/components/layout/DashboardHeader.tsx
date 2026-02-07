@@ -13,13 +13,25 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { auth } from "@/lib/firebase";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const backendUrl = "http://localhost:3000/api";
 
 const DashboardHeader = () => {
     const navigate = useNavigate();
+    const { user, role } = useAuth();
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
+
+    const getRoleName = (r: string | null) => {
+        switch (r) {
+            case 'super_admin': return 'المدير العام';
+            case 'wholesaler': return 'تاجر جملة';
+            case 'retailer': return 'تاجر تجزئة';
+            case 'super_wholesaler': return 'تاجر جملة ممتاز';
+            default: return 'مستخدم';
+        }
+    };
 
     useEffect(() => {
         fetchAlerts();
@@ -27,6 +39,13 @@ const DashboardHeader = () => {
         const interval = setInterval(fetchAlerts, 30000);
         return () => clearInterval(interval);
     }, []);
+    // ... (keep fetchAlerts)
+
+    // ... inside return
+    <div className="hidden md:block text-right">
+        <p className="text-sm font-medium">{user?.displayName || user?.email?.split('@')[0] || 'المستخدم'}</p>
+        <p className="text-xs text-muted-foreground">{getRoleName(role)}</p>
+    </div>
 
     const fetchAlerts = async () => {
         try {
@@ -80,9 +99,9 @@ const DashboardHeader = () => {
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                         <User className="w-5 h-5" />
                     </div>
-                    <div className="hidden md:block">
-                        <p className="text-sm font-medium">المدير العام</p>
-                        <p className="text-xs text-muted-foreground">admin@radpay.com</p>
+                    <div className="hidden md:block text-right">
+                        <p className="text-sm font-medium">{user?.displayName || user?.email?.split('@')[0] || 'المستخدم'}</p>
+                        <p className="text-xs text-muted-foreground">{getRoleName(role)}</p>
                     </div>
                 </div>
             </div>

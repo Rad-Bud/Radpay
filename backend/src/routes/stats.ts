@@ -162,60 +162,184 @@ router.get('/transactions', async (req, res) => {
 });
 
 // GET /api/stats/financials - Detailed Financial Stats
-router.get('/financials', async (req, res) => {
+router.get('/financials', authenticate, async (req, res) => {
     try {
-        const todayStart = getTodayStart();
+        const { uid, role } = req.user!;
+        const { days } = req.query;
+        let periodDays = days ? Number(days) : 30; // Default 30 days
+        if (isNaN(periodDays)) periodDays = 30;
 
-        // 1. Fetch all users to determine roles
-        const usersSnapshot = await db.collection('users').get();
-        const usersMap = new Map(); // uid -> role
-        usersSnapshot.docs.forEach(doc => {
-            usersMap.set(doc.id, doc.data().role);
-        });
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - periodDays);
+        startDate.setHours(0, 0, 0, 0);
+        let startDateIso;
+        try {
+            startDateIso = startDate.toISOString();
+        } catch (e) {
+            startDateIso = new Date().toISOString(); // Fallback
+        }
 
-        // 2. Fetch all wallets
-        const walletsSnapshot = await db.collection('wallets').get();
+        // 1. Fetch Related Users (Retailers)
+        let retailersQuery = db.collection('users').where('role', '==', 'retailer');
+        if (role === 'wholesaler') {
+            retailersQuery = retailersQuery.where('createdBy', '==', uid);
+        }
+        const retailersSnapshot = await retailersQuery.get();
+        const retailers = retailersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const retailerIds = retailers.map(u => u.id);
 
-        let totalSystemBalance = 0;
-        let totalWholesalerBalance = 0;
-        let totalRetailerDebt = 0;
+        // 2. Fetch Wallets
+        let walletsSnapshot;
+        if (role === 'wholesaler') {
+            // Fetch only relevant wallets: Self + Retailers
+            const relevantIds = [uid, ...retailerIds];
+            if (relevantIds.length > 0) {
+                // Firestore 'in' query limit is 10, so strictly we should batch. 
+                // For now, if list is small ok, if large we fetch all and filter in memory or do batches.
+                // Optimized: Fetch all wallets and filter in memory (simpler for now than multiple batches)
+                walletsSnapshot = await db.collection('wallets').get();
+            } else {
+                walletsSnapshot = await db.collection('wallets').get();
+            }
+        } else {
+            walletsSnapshot = await db.collection('wallets').get();
+        }
 
+        const walletsMap = new Map(); // uid -> { balance, debt }
         walletsSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            const balance = data.balance || 0;
-            const debt = data.debt || 0;
-            const role = usersMap.get(doc.id);
+            walletsMap.set(doc.id, doc.data());
+        });
 
-            totalSystemBalance += balance;
+        // 3. Calculate Balances
+        let totalSystemBalance = 0;
+        let totalTotalRetailersBalance = 0;
+        let totalRetailerDebt = 0;
+        let wholesalerDebt = 0;
+        const lowBalanceRetailers: any[] = [];
 
+        // System Balance (My Wallet for Wholesaler, All for Admin)
+        if (role === 'wholesaler') {
+            // Direct fetch to ensure accuracy
+            const myWalletDoc = await db.collection('wallets').doc(uid).get();
+            const myWallet = myWalletDoc.data();
+
+            console.log(`[Stats] Wholesaler UID: ${uid}`);
+            console.log(`[Stats] Direct Wallet Fetch:`, myWallet);
+
+            totalSystemBalance = myWallet?.balance || 0;
+            wholesalerDebt = myWallet?.debt || 0;
+            console.log(`[Stats] Resolved Debt: ${wholesalerDebt}`);
+        } else {
+            // Admin sees sum of purely system funds ?? Or just sum of all wallets?
+            // Usually Admin System Balance = Sum of all wallets
+            walletsSnapshot.docs.forEach(doc => {
+                totalSystemBalance += (doc.data().balance || 0);
+            });
+        }
+
+        // Retailers Balances & Low Balance Check
+        retailers.forEach((user: any) => {
+            const wallet = walletsMap.get(user.id);
+            const balance = wallet?.balance || 0;
+            const debt = wallet?.debt || 0;
+
+            totalTotalRetailersBalance += balance;
+            totalRetailerDebt += debt;
+
+            if (balance < 5000) {
+                lowBalanceRetailers.push({
+                    id: user.id,
+                    name: user.name || 'Unknown',
+                    balance
+                });
+            }
+        });
+
+        // 4. Fetch History for Charts & Activity
+        let txQuery = db.collection('transactions').where('createdAt', '>=', startDateIso);
+
+        // For Wholesaler: Only transactions performed BY them OR BY their retailers?
+        // Usually Financials for Wholesaler = Their sales to retailers (Cash In) AND Retailers sales (Activity)
+        // Let's focus on: Volume of Valid Transactions flowing through the system
+
+        const txSnapshot = await txQuery.orderBy('createdAt', 'asc').get(); // Order for chart
+        const allTransactions = txSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Filter transactions relevant to this user
+        const relevantTransactions = allTransactions.filter((tx: any) => {
             if (role === 'wholesaler') {
-                totalWholesalerBalance += balance;
-            } else if (role === 'retailer') {
-                totalRetailerDebt += debt;
+                // Include:
+                // 1. Performed By Me (e.g. Balance Transfer to Retailer)
+                // 2. Performed By My Retailers (e.g. Flexy to Customer)
+                return tx.performedBy === uid || retailerIds.includes(tx.userId) || retailerIds.includes(tx.performedBy);
+            }
+            return true;
+        });
+
+        // 5. Active Retailers Setup
+        const retailerActivity: Record<string, { count: number, volume: number, name: string }> = {};
+
+        // 6. Chart Data Setup
+        const dailyStats: Record<string, { date: string, amount: number, count: number }> = {};
+
+        relevantTransactions.forEach((tx: any) => {
+            if (tx.status !== 'completed') return;
+            const amount = Number(tx.amount) || 0;
+
+            // Chart Data (Group by Day)
+            if (!tx.createdAt) return; // Skip if no date
+            const dateKey = tx.createdAt.split('T')[0];
+            if (!dailyStats[dateKey]) dailyStats[dateKey] = { date: dateKey, amount: 0, count: 0 };
+
+            // Only count positive value transactions for Volume (ignore adjustments/deductions for the specific sales chart if desired,
+            // but for "Financial Activity" usually all movement counts. Let's stick to Sales/Transfers being positive).
+            if (amount > 0) {
+                dailyStats[dateKey].amount += amount;
+            }
+            dailyStats[dateKey].count += 1;
+
+            // Active Retailers Logic
+            // If the transaction was done BY a retailer (e.g. Flexy)
+            if (retailerIds.includes(tx.performedBy)) {
+                if (!retailerActivity[tx.performedBy]) {
+                    const r = retailers.find(u => u.id === tx.performedBy);
+                    const retailerName = (r as any)?.name || 'Unknown';
+                    retailerActivity[tx.performedBy] = { count: 0, volume: 0, name: retailerName };
+                }
+                retailerActivity[tx.performedBy].count += 1;
+                retailerActivity[tx.performedBy].volume += amount;
             }
         });
 
-        // 3. Fetch Today's Transactions
-        const todayTxSnapshot = await db.collection('transactions')
-            .where('createdAt', '>=', todayStart)
-            .get();
+        const chartData = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
 
-        const todayTransactionsCount = todayTxSnapshot.size;
-        let todayVolume = 0;
+        const activeRetailers = Object.values(retailerActivity)
+            .sort((a, b) => b.volume - a.volume)
+            .slice(0, 5); // Top 5
 
-        todayTxSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            if (data.status === 'completed') {
-                todayVolume += Number(data.amount) || 0;
-            }
-        });
+        // Today's specific stats (legacy support + cards)
+        const todayIso = new Date().toISOString().split('T')[0];
+        const todayStats = dailyStats[todayIso] || { amount: 0, count: 0 };
 
         res.json({
+            // KPI Cards
+            uid,
             totalSystemBalance,
-            totalWholesalerBalance,
+            wholesalerDebt,
+            totalWholesalerBalance: totalTotalRetailersBalance, // Naming kept for compatibility or updated frontend
+            totalRetailersBalance: totalTotalRetailersBalance,  // Better name
             totalRetailerDebt,
-            todayTransactions: todayTransactionsCount,
-            todayVolume
+
+            // Today
+            todayVolume: todayStats.amount,
+            todayTransactions: todayStats.count,
+
+            // Lists
+            activeRetailers,
+            lowBalanceRetailers, // < 5000
+
+            // Chart
+            chartData
         });
 
     } catch (error) {

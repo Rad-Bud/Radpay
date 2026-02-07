@@ -3,7 +3,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ArrowUpRight, ArrowDownLeft, Wallet, History as HistoryIcon } from "lucide-react";
+import { ArrowUpRight, ArrowDownLeft, Wallet, History as HistoryIcon, Copy } from "lucide-react";
+import { toast } from "sonner";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -57,6 +58,7 @@ const Transactions = () => {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="text-right">رقم العملية</TableHead>
                                 <TableHead className="text-right">نوع العملية</TableHead>
                                 <TableHead className="text-right">الوصف</TableHead>
                                 <TableHead className="text-right">المبلغ</TableHead>
@@ -67,10 +69,10 @@ const Transactions = () => {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={6} className="text-center">تحميل...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="text-center">تحميل...</TableCell></TableRow>
                             ) : transactions.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                                    <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                                         <div className="flex flex-col items-center gap-2">
                                             <HistoryIcon className="w-8 h-8 opacity-50" />
                                             <p>لا توجد عمليات مسجلة حتى الآن</p>
@@ -80,6 +82,18 @@ const Transactions = () => {
                             ) : (
                                 transactions.map((tx) => (
                                     <TableRow key={tx.id}>
+                                        <TableCell className="font-mono text-xs">
+                                            <div className="flex items-center gap-2 group">
+                                                <span title={tx.id}>{tx.id.slice(0, 8)}...</span>
+                                                <button
+                                                    onClick={() => navigator.clipboard.writeText(tx.id).then(() => toast.success("تم نسخ رقم العملية"))}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
+                                                    title="نسخ رقم العملية"
+                                                >
+                                                    <Copy className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </TableCell>
                                         <TableCell>
                                             <Badge variant="secondary" className={getTypeColor(tx.type)}>
                                                 {getTypeLabel(tx.type)}
@@ -89,7 +103,7 @@ const Transactions = () => {
                                         <TableCell className={`font-bold ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
                                             {tx.type === 'deposit' ? '+' : '-'}{Number(tx.amount).toLocaleString()} د.ج
                                         </TableCell>
-                                        <TableCell className="text-xs font-mono text-muted-foreground">{tx.userId}</TableCell>
+                                        <TableCell className="text-sm font-medium">{tx.userName || tx.userId}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={tx.status === 'completed' ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}>
                                                 {tx.status === 'completed' ? 'ناجحة' : 'فاشلة'}
