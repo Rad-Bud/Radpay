@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Wallet, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -13,12 +13,9 @@ const Header = () => {
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-tashil-emerald to-tashil-emerald-light flex items-center justify-center glow-effect">
-              <Wallet className="w-5 h-5 md:w-6 md:h-6 text-primary-foreground" />
-            </div>
+            <img src="/logo.png" alt="Rad Pay Logo" className="w-20 h-20 md:w-24 md:h-24 rounded-xl object-contain" />
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-gradient-primary">Tashil Pay</h1>
-              <p className="text-[10px] md:text-xs text-muted-foreground">تسهيل الدفع</p>
+              <h1 className="text-lg md:text-xl font-bold text-gradient-primary">Rad Pay</h1>
             </div>
           </div>
 
@@ -29,9 +26,6 @@ const Header = () => {
             </a>
             <a href="#features" className="text-muted-foreground hover:text-primary transition-colors">
               المميزات
-            </a>
-            <a href="#dashboard" className="text-muted-foreground hover:text-primary transition-colors">
-              لوحة التحكم
             </a>
             <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors">
               تواصل معنا
@@ -66,9 +60,6 @@ const Header = () => {
               </a>
               <a href="#features" className="text-muted-foreground hover:text-primary transition-colors py-2">
                 المميزات
-              </a>
-              <a href="#dashboard" className="text-muted-foreground hover:text-primary transition-colors py-2">
-                لوحة التحكم
               </a>
               <a href="#contact" className="text-muted-foreground hover:text-primary transition-colors py-2">
                 تواصل معنا

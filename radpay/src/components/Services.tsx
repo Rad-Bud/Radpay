@@ -1,7 +1,7 @@
-import { 
-  Smartphone, 
-  Wallet, 
-  Building2, 
+import {
+  Smartphone,
+  Wallet,
+  Building2,
   PiggyBank,
   ArrowLeft
 } from "lucide-react";
@@ -83,7 +83,7 @@ const Services = () => {
     <section id="services" className="py-24 relative">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-secondary/30 to-background" />
-      
+
       <div className="container mx-auto px-4 relative z-10">
         {/* Section Header */}
         <div className="text-center mb-16">
@@ -91,7 +91,7 @@ const Services = () => {
             خدماتنا الأساسية
           </span>
           <h2 className="text-3xl md:text-5xl font-bold mb-6">
-            كل ما تحتاجه في <span className="text-gradient-primary">منصة واحدة</span>
+            كل ما تحتاجه في <span className="text-primary">منصة واحدة</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             نظام مالي رقمي متكامل يمكّنك من إدارة أعمالك باحترافية وكفاءة عالية
@@ -110,10 +110,10 @@ const Services = () => {
                 <div className={`w-14 h-14 rounded-2xl ${colors.bg} ${colors.border} border flex items-center justify-center mb-6 transition-colors ${colors.hover}`}>
                   <service.icon className={`w-7 h-7 ${colors.icon}`} />
                 </div>
-                
+
                 <h3 className="text-xl md:text-2xl font-bold mb-3">{service.title}</h3>
                 <p className="text-muted-foreground mb-6">{service.description}</p>
-                
+
                 <div className="flex flex-wrap gap-2">
                   {service.features.map((feature, idx) => (
                     <span

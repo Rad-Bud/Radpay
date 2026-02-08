@@ -31,9 +31,9 @@ const Hero = () => {
 
           {/* Main Heading */}
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight animate-slide-up">
-            <span className="text-foreground">وزّع رصيدك</span>
+            <span className="text-foreground">كل أرصدتك</span>
             <br />
-            <span className="text-gradient-primary">بذكاء وسرعة</span>
+            <span className="text-primary">في مكان واحد</span>
           </h1>
 
           {/* Subheading */}
@@ -48,8 +48,11 @@ const Hero = () => {
               ابدأ مجاناً
               <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             </Button>
-            <Button variant="outline" size="xl">
-              شاهد العرض التوضيحي
+            <Button variant="outline" size="xl" onClick={() => {
+              const servicesSection = document.getElementById('services');
+              servicesSection?.scrollIntoView({ behavior: 'smooth' });
+            }}>
+              اكتشف جميع الخدمات
             </Button>
           </div>
 

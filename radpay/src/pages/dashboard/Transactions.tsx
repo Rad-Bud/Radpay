@@ -80,7 +80,7 @@ const Transactions = () => {
                                 <TableHead className="text-right">نوع العملية</TableHead>
                                 <TableHead className="text-right">الوصف</TableHead>
                                 <TableHead className="text-right">المبلغ</TableHead>
-                                {((role as string) === 'admin' || (role as string) === 'super_admin' || (role as string) === 'wholesaler') && (
+                                {((role as string) === 'admin' || (role as string) === 'super_admin' || (role as string) === 'wholesaler' || (role as string) === 'retailer') && (
                                     <TableHead className="text-right text-green-600">الربح</TableHead>
                                 )}
                                 <TableHead className="text-right">المستخدم</TableHead>
@@ -134,6 +134,11 @@ const Transactions = () => {
                                         {(role as string) === 'wholesaler' && (
                                             <TableCell className="text-green-600 font-bold">
                                                 {tx.financials?.wholesalerProfit ? `+${Number(tx.financials.wholesalerProfit).toFixed(2)}` : '-'}
+                                            </TableCell>
+                                        )}
+                                        {(role as string) === 'retailer' && (
+                                            <TableCell className="text-green-600 font-bold">
+                                                {tx.financials?.retailerProfit ? `+${Number(tx.financials.retailerProfit).toFixed(2)}` : '-'}
                                             </TableCell>
                                         )}
 

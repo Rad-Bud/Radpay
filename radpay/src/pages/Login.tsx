@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { ArrowRight } from "lucide-react";
 
 const Login = () => {
     const [email, setEmail] = useState("");
@@ -41,7 +42,15 @@ const Login = () => {
 
             <Card className="w-full max-w-md relative z-10 glass-card border-none shadow-2xl">
                 <CardHeader className="space-y-1 text-center">
-                    <CardTitle className="text-2xl font-bold text-gradient-primary">Tashil Pay</CardTitle>
+                    <Button
+                        variant="ghost"
+                        onClick={() => navigate("/")}
+                        className="absolute top-4 right-4 z-10"
+                        size="sm"
+                    >
+                        <ArrowRight className="w-4 h-4" />
+                    </Button>
+                    <CardTitle className="text-2xl font-bold text-gradient-primary">Rad Pay</CardTitle>
                     <CardDescription>
                         أدخل بياناتك للدخول إلى لوحة التحكم
                     </CardDescription>

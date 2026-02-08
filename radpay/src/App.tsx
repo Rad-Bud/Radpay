@@ -20,6 +20,8 @@ import Transactions from "./pages/dashboard/Transactions";
 import Settings from "./pages/dashboard/Settings";
 import Financials from "./pages/dashboard/Financials";
 import RechargeBalance from "./pages/dashboard/RechargeBalance";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "./contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
@@ -37,9 +39,11 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<Login />} />
+                <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/terms-of-service" element={<TermsOfService />} />
 
                 {/* Protected Routes */}
                 <Route element={<ProtectedRoute />}>

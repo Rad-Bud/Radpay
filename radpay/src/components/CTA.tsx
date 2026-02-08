@@ -27,7 +27,7 @@ const CTA = () => {
           </h2>
 
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            انضم إلى مئات المكاتب التي تثق في Tashil Pay لإدارة عملياتها المالية بكفاءة وأمان
+            انضم إلى مئات المكاتب التي تثق في Rad Pay لإدارة عملياتها المالية بكفاءة وأمان
           </p>
 
           {/* CTA Buttons */}

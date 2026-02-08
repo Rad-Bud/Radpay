@@ -1,4 +1,4 @@
-import { Wallet, Mail, Phone, MapPin } from "lucide-react";
+import { Mail, Phone, MapPin } from "lucide-react";
 
 const Footer = () => {
   return (
@@ -8,12 +8,9 @@ const Footer = () => {
           {/* Brand */}
           <div className="md:col-span-1">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-tashil-emerald to-tashil-emerald-light flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-primary-foreground" />
-              </div>
+              <img src="/logo.png" alt="Rad Pay Logo" className="w-16 h-16 rounded-xl object-contain" />
               <div>
-                <h3 className="text-lg font-bold text-gradient-primary">Tashil Pay</h3>
-                <p className="text-xs text-muted-foreground">تسهيل الدفع</p>
+                <h3 className="text-lg font-bold text-gradient-primary">Rad Pay</h3>
               </div>
             </div>
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -36,10 +33,9 @@ const Footer = () => {
           <div>
             <h4 className="font-bold mb-4">الدعم</h4>
             <ul className="space-y-3">
-              <li><a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">مركز المساعدة</a></li>
-              <li><a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">الأسئلة الشائعة</a></li>
-              <li><a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">الشروط والأحكام</a></li>
-              <li><a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">سياسة الخصوصية</a></li>
+              <li><a href="#faq" className="text-muted-foreground hover:text-primary transition-colors text-sm">الأسئلة الشائعة</a></li>
+              <li><a href="/privacy-policy" className="text-muted-foreground hover:text-primary transition-colors text-sm">سياسة الخصوصية</a></li>
+              <li><a href="/terms-of-service" className="text-muted-foreground hover:text-primary transition-colors text-sm">الشروط والأحكام</a></li>
             </ul>
           </div>
 
@@ -49,15 +45,15 @@ const Footer = () => {
             <ul className="space-y-3">
               <li className="flex items-center gap-3 text-muted-foreground text-sm">
                 <Mail className="w-4 h-4 text-primary" />
-                <span>info@tashilpay.ly</span>
+                <span>info@radpay.dz</span>
               </li>
               <li className="flex items-center gap-3 text-muted-foreground text-sm">
                 <Phone className="w-4 h-4 text-primary" />
-                <span dir="ltr">+218 91 XXX XXXX</span>
+                <span dir="ltr">+213 XX XXX XXXX</span>
               </li>
               <li className="flex items-center gap-3 text-muted-foreground text-sm">
                 <MapPin className="w-4 h-4 text-primary" />
-                <span>طرابلس، ليبيا</span>
+                <span>الجزائر</span>
               </li>
             </ul>
           </div>
@@ -66,13 +62,13 @@ const Footer = () => {
         {/* Bottom */}
         <div className="pt-8 border-t border-border/50 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">
-            © 2024 Tashil Pay. جميع الحقوق محفوظة.
+            © 2024 Rad Pay. جميع الحقوق محفوظة.
           </p>
           <div className="flex items-center gap-6">
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+            <a href="/privacy-policy" className="text-muted-foreground hover:text-primary transition-colors text-sm">
               سياسة الخصوصية
             </a>
-            <a href="#" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+            <a href="/terms-of-service" className="text-muted-foreground hover:text-primary transition-colors text-sm">
               الشروط والأحكام
             </a>
           </div>

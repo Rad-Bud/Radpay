@@ -85,7 +85,7 @@ const Sidebar = () => {
                 </div>
                 {!isCollapsed && (
                     <h1 className="text-xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap">
-                        Tashil Pay
+                        Rad Pay
                     </h1>
                 )}
             </div>

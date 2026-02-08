@@ -83,6 +83,7 @@ router.post('/flexy', authenticate, async (req, res) => {
 
             const wholesalerProfit = retailerCost - wholesalerCost;
             const adminProfit = wholesalerCost - adminCost;
+            const retailerProfit = rechargeAmount - retailerCost;
 
             financials = {
                 retailerRate,
@@ -91,6 +92,7 @@ router.post('/flexy', authenticate, async (req, res) => {
                 wholesalerCost,
                 adminRate,
                 adminCost,
+                retailerProfit,
                 wholesalerProfit,
                 adminProfit,
                 wholesalerId
@@ -276,6 +278,7 @@ router.post('/offer', authenticate, async (req, res) => {
 
             const wholesalerProfit = retailerCost - wholesalerCost;
             const adminProfit = wholesalerCost - adminCost;
+            const retailerProfit = price - retailerCost;
 
             financials = {
                 retailerRate,
@@ -284,6 +287,7 @@ router.post('/offer', authenticate, async (req, res) => {
                 wholesalerCost,
                 adminRate,
                 adminCost,
+                retailerProfit,
                 wholesalerProfit,
                 adminProfit,
                 wholesalerId

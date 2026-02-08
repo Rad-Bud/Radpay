@@ -106,43 +106,19 @@
     /* Direction is handled dynamically by LanguageContext */
   }
 
-  /* RTL Support - Ensure text aligns properly */
-  html[dir="rtl"] {
-    text-align: right;
-  }
-
-  html[dir="rtl"] body,
-  html[dir="rtl"] p,
-  html[dir="rtl"] h1,
-  html[dir="rtl"] h2,
-  html[dir="rtl"] h3,
-  html[dir="rtl"] h4,
-  html[dir="rtl"] h5,
-  html[dir="rtl"] h6,
-  html[dir="rtl"] div,
-  html[dir="rtl"] span,
-  html[dir="rtl"] label,
-  html[dir="rtl"] button {
+  /* RTL Support - Apply only to dashboard/app content, not landing page */
+  html[dir="rtl"] .dashboard-content,
+  html[dir="rtl"] [role="dialog"],
+  html[dir="rtl"] [role="menu"],
+  html[dir="rtl"] .card-content {
     text-align: right;
   }
 
   /* LTR Support */
-  html[dir="ltr"] {
-    text-align: left;
-  }
-
-  html[dir="ltr"] body,
-  html[dir="ltr"] p,
-  html[dir="ltr"] h1,
-  html[dir="ltr"] h2,
-  html[dir="ltr"] h3,
-  html[dir="ltr"] h4,
-  html[dir="ltr"] h5,
-  html[dir="ltr"] h6,
-  html[dir="ltr"] div,
-  html[dir="ltr"] span,
-  html[dir="ltr"] label,
-  html[dir="ltr"] button {
+  html[dir="ltr"] .dashboard-content,
+  html[dir="ltr"] [role="dialog"],
+  html[dir="ltr"] [role="menu"],
+  html[dir="ltr"] .card-content {
     text-align: left;
   }
 

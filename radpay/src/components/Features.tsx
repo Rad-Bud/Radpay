@@ -1,10 +1,10 @@
-import { 
-  Cpu, 
-  Layers, 
-  Bell, 
-  ShieldCheck, 
-  BarChart3, 
-  Expand 
+import {
+  Cpu,
+  Layers,
+  Bell,
+  ShieldCheck,
+  BarChart3,
+  Expand
 } from "lucide-react";
 
 const features = [
@@ -50,7 +50,7 @@ const Features = () => {
             مميزات ذكية
           </span>
           <h2 className="text-3xl md:text-5xl font-bold mb-6">
-            تقنيات <span className="text-gradient-gold">متطورة</span> لأداء استثنائي
+            تقنيات <span className="text-tashil-gold">متطورة</span> لأداء استثنائي
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             نستخدم أحدث التقنيات لضمان سرعة وموثوقية وأمان عملياتك
@@ -66,12 +66,12 @@ const Features = () => {
             >
               {/* Glow Effect */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              
+
               <div className="relative">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <feature.icon className="w-6 h-6 text-primary" />
                 </div>
-                
+
                 <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
               </div>
