@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../config/firebase.js';
+import admin from 'firebase-admin';
 
 const router = Router();
 
@@ -16,11 +17,101 @@ interface Transaction {
     [key: string]: any;
 }
 
-// GET /api/transactions - List all transactions
+// GET /api/transactions - List transactions based on user role
 router.get('/', async (req, res) => {
     try {
-        const snapshot = await db.collection('transactions').orderBy('createdAt', 'desc').limit(50).get();
-        const transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+        // Get authenticated user from token (if available)
+        const authHeader = req.headers.authorization;
+        let authenticatedUser: { uid: string; role: string } | null = null;
+
+        if (authHeader?.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            try {
+                const decodedToken = await admin.auth().verifyIdToken(token);
+                const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+                const userData = userDoc.data();
+                authenticatedUser = {
+                    uid: decodedToken.uid,
+                    role: userData?.role || 'retailer'
+                };
+                console.log(`[GET /transactions] Authenticated user: ${authenticatedUser.uid}, Role: ${authenticatedUser.role}`);
+            } catch (authError) {
+                console.error('[GET /transactions] Auth error:', authError);
+            }
+        }
+
+        let transactions: Transaction[] = [];
+
+        // Role-based filtering
+        if (authenticatedUser) {
+            const { uid, role } = authenticatedUser;
+
+            if (role === 'retailer') {
+                // Retailer: Only their own transactions
+                console.log(`[GET /transactions] Fetching transactions for retailer: ${uid}`);
+                const snapshot = await db.collection('transactions')
+                    .where('userId', '==', uid)
+                    .limit(50)
+                    .get();
+
+                transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            } else if (role === 'wholesaler') {
+                // Wholesaler: Their own + their retailers' transactions
+                console.log(`[GET /transactions] Fetching transactions for wholesaler: ${uid}`);
+
+                // Get all retailers created by this wholesaler
+                const retailersSnapshot = await db.collection('users')
+                    .where('createdBy', '==', uid)
+                    .where('role', '==', 'retailer')
+                    .get();
+
+                const retailerIds = retailersSnapshot.docs.map(doc => doc.id);
+                console.log(`[GET /transactions] Found ${retailerIds.length} retailers for wholesaler ${uid}`);
+
+                // Fetch transactions for wholesaler + all their retailers
+                const userIdsToFetch = [uid, ...retailerIds];
+
+                // Firestore 'in' query supports max 10 items, so we need to batch if more
+                const batchSize = 10;
+                const allSnapshots = [];
+
+                for (let i = 0; i < userIdsToFetch.length; i += batchSize) {
+                    const batch = userIdsToFetch.slice(i, i + batchSize);
+                    const snapshot = await db.collection('transactions')
+                        .where('userId', 'in', batch)
+                        .limit(200)
+                        .get();
+                    allSnapshots.push(...snapshot.docs);
+                }
+
+                transactions = allSnapshots.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                transactions = transactions.slice(0, 50); // Limit to 50 most recent
+
+            } else {
+                // Admin/Super Admin: All transactions
+                console.log(`[GET /transactions] Fetching all transactions for admin: ${uid}`);
+                const snapshot = await db.collection('transactions')
+                    .orderBy('createdAt', 'desc')
+                    .limit(50)
+                    .get();
+
+                transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+            }
+        } else {
+            // No authentication - return all (for backward compatibility)
+            console.log(`[GET /transactions] No authentication - fetching all transactions`);
+            const snapshot = await db.collection('transactions')
+                .orderBy('createdAt', 'desc')
+                .limit(50)
+                .get();
+
+            transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+        }
+
+        console.log(`[GET /transactions] Returning ${transactions.length} transactions`);
 
         // Extract unique User IDs (excluding 'system' or nulls)
         const userIds = [...new Set(transactions.map(t => t.userId).filter(id => id && id !== 'system'))];
@@ -33,34 +124,17 @@ router.get('/', async (req, res) => {
             userDocs.forEach(doc => {
                 if (doc.exists) {
                     const data = doc.data();
-                    // Try multiple fields for the name
                     usersMap[doc.id] = data?.name || data?.displayName || data?.username || data?.email || 'Unknown';
-                    console.log(`Resolved User ${doc.id} to ${usersMap[doc.id]}`);
-                } else {
-                    console.log(`User ${doc.id} not found in Firestore`);
                 }
             });
         }
 
         const enrichedTransactions = transactions.map(t => {
-            // If userId is system, show 'System'
             if (t.userId === 'system') return { ...t, userName: 'System' };
-
-            // Get resolved name
-            let resolvedName = usersMap[t.userId];
-
-            // If not found in users map, fallback to ID (or check if it was performed by admin)
-            if (!resolvedName) {
-                resolvedName = t.userId;
-            }
-
-            // Check if performedBy adds context (e.g. if I am viewing as admin)
-            // context: 'المرسل' (Sender). If type is deposit, sender is performedBy.
-            // If type is game_topup, sender is the user (or system).
 
             return {
                 ...t,
-                userName: resolvedName
+                userName: usersMap[t.userId] || t.userId
             };
         });
 
@@ -70,6 +144,7 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch transactions' });
     }
 });
+
 
 // Helper endpoint to manually Record a transaction (Internal use or Testing)
 router.post('/', async (req, res) => {

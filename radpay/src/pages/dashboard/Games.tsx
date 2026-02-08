@@ -5,15 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, ArrowRight, Gamepad2, Package, Layers, Archive } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowRight, Gamepad2, Package, Layers, Archive, ShoppingCart } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GameCardsTable from "@/components/cards/GameCardsTable";
 import AddGameCardDialog from "@/components/cards/AddGameCardDialog";
+import PurchaseCardDialog from "@/components/cards/PurchaseCardDialog";
+import CardDetailsModal from "@/components/cards/CardDetailsModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 const backendUrl = "http://localhost:3000/api";
 
 const Games = () => {
+    const { role } = useAuth();
     const [selectedGame, setSelectedGame] = useState<any | null>(null);
     const [games, setGames] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -22,14 +26,33 @@ const Games = () => {
     const [isAddGameOpen, setIsAddGameOpen] = useState(false);
     const [isAddPackageOpen, setIsAddPackageOpen] = useState(false);
     const [isAddCardOpen, setIsAddCardOpen] = useState(false);
+    const [selectedPackageForAddCard, setSelectedPackageForAddCard] = useState<any | null>(null);
+
+    // Active Tab State
+    const [activeTab, setActiveTab] = useState('packages');
 
     // Form Data
     const [gameForm, setGameForm] = useState({ name: "", description: "" });
-    const [packageForm, setPackageForm] = useState({ name: "", price: "", costPrice: "" });
+    const [packageForm, setPackageForm] = useState({
+        name: "",
+        purchasePrice: "",
+        wholesalerPrice: "",
+        retailerPrice: "",
+        customerPrice: ""
+    });
 
     // Inventory State
     const [gameCards, setGameCards] = useState<any[]>([]);
     const [cardsLoading, setCardsLoading] = useState(false);
+
+    // Purchase Dialog State
+    const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
+    const [selectedPackageForPurchase, setSelectedPackageForPurchase] = useState<any | null>(null);
+    const [availableCardCounts, setAvailableCardCounts] = useState<Record<string, number>>({});
+
+    // Post-Purchase State
+    const [purchasedCard, setPurchasedCard] = useState<any | null>(null);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
     useEffect(() => {
         fetchGames();
@@ -65,9 +88,23 @@ const Games = () => {
         }
     };
 
+    // Fetch available card counts
+    const fetchAvailableCardCounts = async (gameId: string) => {
+        try {
+            const res = await fetch(`${backendUrl}/cards/available-count?gameId=${gameId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableCardCounts(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch available counts", error);
+        }
+    };
+
     useEffect(() => {
         if (selectedGame) {
             fetchGameCards(selectedGame.id);
+            fetchAvailableCardCounts(selectedGame.id);
         }
     }, [selectedGame]);
 
@@ -117,7 +154,7 @@ const Games = () => {
             });
             if (res.ok) {
                 setIsAddPackageOpen(false);
-                setPackageForm({ name: "", price: "", costPrice: "" });
+                setPackageForm({ name: "", purchasePrice: "", wholesalerPrice: "", retailerPrice: "", customerPrice: "" });
                 // Refresh games to update the packages list in state
                 const updatedGamesRes = await fetch(`${backendUrl}/games`);
                 const updatedGames = await updatedGamesRes.json();
@@ -283,7 +320,7 @@ const Games = () => {
                             </Button>
                         </div>
 
-                        <Tabs defaultValue="packages" className="w-full">
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
                                 <TabsTrigger
                                     value="packages"
@@ -329,27 +366,80 @@ const Games = () => {
                                                         required
                                                     />
                                                 </div>
+
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="space-y-2">
-                                                        <Label>سعر البيع (د.ج)</Label>
+                                                        <Label>سعر الشراء (Admin)</Label>
                                                         <Input
                                                             type="number"
-                                                            value={packageForm.price}
-                                                            onChange={(e) => setPackageForm({ ...packageForm, price: e.target.value })}
-                                                            placeholder="مثال: 250"
+                                                            value={packageForm.purchasePrice}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, purchasePrice: e.target.value })}
+                                                            placeholder="200"
                                                             required
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <Label>سعر التكلفة (اختياري)</Label>
+                                                        <Label>سعر الجملة (Wholesaler)</Label>
                                                         <Input
                                                             type="number"
-                                                            value={packageForm.costPrice}
-                                                            onChange={(e) => setPackageForm({ ...packageForm, costPrice: e.target.value })}
-                                                            placeholder="مثال: 200"
+                                                            value={packageForm.wholesalerPrice}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, wholesalerPrice: e.target.value })}
+                                                            placeholder="210"
+                                                            required
                                                         />
                                                     </div>
                                                 </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label>سعر التجزئة (Retailer)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            value={packageForm.retailerPrice}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, retailerPrice: e.target.value })}
+                                                            placeholder="220"
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>سعر الزبون (Customer)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            value={packageForm.customerPrice}
+                                                            onChange={(e) => setPackageForm({ ...packageForm, customerPrice: e.target.value })}
+                                                            placeholder="250"
+                                                            required
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Profit Calculation */}
+                                                {packageForm.purchasePrice && packageForm.wholesalerPrice && packageForm.retailerPrice && packageForm.customerPrice && (
+                                                    <div className="bg-emerald-50 dark:bg-emerald-950 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                                        <p className="text-sm font-semibold mb-2">الأرباح المتوقعة:</p>
+                                                        <div className="grid grid-cols-3 gap-2 text-xs">
+                                                            <div>
+                                                                <span className="text-muted-foreground">Admin:</span>
+                                                                <span className="font-bold text-emerald-600 mr-1">
+                                                                    {(Number(packageForm.wholesalerPrice) - Number(packageForm.purchasePrice)).toLocaleString()} دج
+                                                                </span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-muted-foreground">Wholesaler:</span>
+                                                                <span className="font-bold text-emerald-600 mr-1">
+                                                                    {(Number(packageForm.retailerPrice) - Number(packageForm.wholesalerPrice)).toLocaleString()} دج
+                                                                </span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-muted-foreground">Retailer:</span>
+                                                                <span className="font-bold text-emerald-600 mr-1">
+                                                                    {(Number(packageForm.customerPrice) - Number(packageForm.retailerPrice)).toLocaleString()} دج
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <DialogFooter>
                                                     <Button type="submit">إضافة الباقة</Button>
                                                 </DialogFooter>
@@ -363,6 +453,7 @@ const Games = () => {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="text-right">اسم الباقة</TableHead>
+                                                <TableHead className="text-right">البطاقات المتوفرة</TableHead>
                                                 <TableHead className="text-right">سعر البيع</TableHead>
                                                 <TableHead className="text-right">سعر التكلفة</TableHead>
                                                 <TableHead className="text-right">الحالة</TableHead>
@@ -372,37 +463,83 @@ const Games = () => {
                                         <TableBody>
                                             {selectedGame.packages?.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                                         لا توجد باقات مضافة لهذه اللعبة
                                                     </TableCell>
                                                 </TableRow>
                                             ) : (
-                                                selectedGame.packages?.map((pkg: any) => (
-                                                    <TableRow key={pkg.id}>
-                                                        <TableCell className="font-medium">{pkg.name}</TableCell>
-                                                        <TableCell className="font-bold text-emerald-600">
-                                                            {Number(pkg.price).toLocaleString()} د.ج
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground">
-                                                            {pkg.costPrice ? `${Number(pkg.costPrice).toLocaleString()} د.ج` : '-'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-bold">
-                                                                نشط
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                                onClick={() => handleDeletePackage(pkg.id)}
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
+                                                selectedGame.packages?.map((pkg: any) => {
+                                                    const availableCount = availableCardCounts[pkg.id] || 0;
+                                                    return (
+                                                        <TableRow key={pkg.id}>
+                                                            <TableCell className="font-medium">{pkg.name}</TableCell>
+                                                            <TableCell>
+                                                                <span className={`font-semibold ${availableCount > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                                    {availableCount} بطاقة
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="font-bold text-emerald-600">
+                                                                {Number(pkg.price).toLocaleString()} د.ج
+                                                            </TableCell>
+                                                            <TableCell className="text-muted-foreground">
+                                                                {pkg.costPrice ? `${Number(pkg.costPrice).toLocaleString()} د.ج` : '-'}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-bold">
+                                                                    نشط
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex gap-2">
+                                                                    {/* Show purchase button only for wholesalers/retailers, not admin */}
+                                                                    {(role === 'super_wholesaler' || role === 'wholesaler' || role === 'retailer') && (
+                                                                        <Button
+                                                                            variant="default"
+                                                                            size="sm"
+                                                                            className="gap-1"
+                                                                            onClick={() => {
+                                                                                setSelectedPackageForPurchase(pkg);
+                                                                                setIsPurchaseDialogOpen(true);
+                                                                            }}
+                                                                            disabled={availableCount === 0}
+                                                                        >
+                                                                            <ShoppingCart className="w-3 h-3" />
+                                                                            شراء
+                                                                        </Button>
+                                                                    )}
+
+                                                                    {/* Admin can delete packages and add cards */}
+                                                                    {(role === 'super_admin') && (
+                                                                        <>
+                                                                            <Button
+                                                                                variant="default"
+                                                                                size="sm"
+                                                                                className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                                                                                onClick={() => {
+                                                                                    setSelectedPackageForAddCard(pkg);
+                                                                                    setActiveTab('inventory');
+                                                                                    // Open dialog after a short delay to ensure tab switch completes
+                                                                                    setTimeout(() => setIsAddCardOpen(true), 100);
+                                                                                }}
+                                                                            >
+                                                                                <Plus className="w-3 h-3" />
+                                                                                إضافة بطاقة
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                                onClick={() => handleDeletePackage(pkg.id)}
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })
                                             )}
                                         </TableBody>
                                     </Table>
@@ -428,6 +565,7 @@ const Games = () => {
                                     cards={gameCards}
                                     packages={selectedGame.packages || []}
                                     loading={cardsLoading}
+                                    gameName={selectedGame.name}
                                 />
 
                                 <AddGameCardDialog
@@ -435,12 +573,59 @@ const Games = () => {
                                     onOpenChange={setIsAddCardOpen}
                                     onSubmit={handleAddCardSubmit}
                                     packages={selectedGame.packages || []}
+                                    preSelectedPackage={selectedPackageForAddCard}
                                 />
                             </TabsContent>
                         </Tabs>
                     </div>
                 )}
             </div>
+
+            {/* Purchase Dialog */}
+            {selectedPackageForPurchase && (
+                <PurchaseCardDialog
+                    open={isPurchaseDialogOpen}
+                    onClose={() => {
+                        setIsPurchaseDialogOpen(false);
+                        setSelectedPackageForPurchase(null);
+                    }}
+                    packageData={selectedPackageForPurchase}
+                    gameId={selectedGame?.id || ''}
+                    gameName={selectedGame?.name || ''}
+                    availableCount={availableCardCounts[selectedPackageForPurchase.id] || 0}
+                    onSuccess={(result) => {
+                        // Refresh counts after purchase
+                        if (selectedGame) {
+                            fetchAvailableCardCounts(selectedGame.id);
+                            fetchGameCards(selectedGame.id);
+                        }
+
+                        // Switch to inventory tab
+                        setActiveTab('inventory');
+
+                        // Show card details modal
+                        setPurchasedCard({
+                            ...result.card,
+                            packageData: selectedPackageForPurchase // Pass package data for details
+                        });
+                        setIsDetailsModalOpen(true);
+                    }}
+                />
+            )}
+
+            {/* Post-Purchase Details Modal */}
+            {purchasedCard && (
+                <CardDetailsModal
+                    open={isDetailsModalOpen}
+                    onClose={() => {
+                        setIsDetailsModalOpen(false);
+                        setPurchasedCard(null);
+                    }}
+                    card={purchasedCard}
+                    packageName={selectedPackageForPurchase?.name || ''}
+                    gameName={selectedGame?.name || ''}
+                />
+            )}
         </DashboardLayout>
     );
 };

@@ -9,6 +9,8 @@ import { Smartphone, CheckCircle2, Wifi, Router, Gamepad2, Ticket, Wallet, Eye, 
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import PurchaseCardDialog from "@/components/cards/PurchaseCardDialog";
+import CardDetailsModal from "@/components/cards/CardDetailsModal";
 
 // Operator configuration matching the design
 const OPERATORS = [
@@ -87,6 +89,14 @@ const RechargeBalance = () => {
     const [selectedPackage, setSelectedPackage] = useState<GamePackage | null>(null);
     const [loadingGames, setLoadingGames] = useState(false);
 
+    // Purchase Dialog State
+    const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
+    const [availableCardCounts, setAvailableCardCounts] = useState<Record<string, number>>({});
+
+    // Post-Purchase State
+    const [purchasedCard, setPurchasedCard] = useState<any | null>(null);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
     // Balance State
     const [balance, setBalance] = useState(0);
     const [showBalance, setShowBalance] = useState(true);
@@ -127,6 +137,26 @@ const RechargeBalance = () => {
         fetchOffers();
         fetchBalance();
     }, [user]);
+
+    // Fetch available card counts
+    const fetchAvailableCardCounts = async (gameId: string) => {
+        try {
+            const res = await fetch(`${backendUrl}/cards/available-count?gameId=${gameId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableCardCounts(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch available counts", error);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedGame) {
+            fetchAvailableCardCounts(selectedGame.id);
+            setSelectedPackage(null); // Reset package selection when game changes
+        }
+    }, [selectedGame]);
 
     // Fetch Real Balance
     const fetchBalance = async () => {
@@ -260,7 +290,22 @@ const RechargeBalance = () => {
 
     const handleGameSubmit = () => {
         if (!selectedGame || !selectedPackage) return;
-        toast.success("تم شراء البطاقة بنجاح");
+        setIsPurchaseDialogOpen(true);
+    };
+
+    const handlePurchaseSuccess = (result: any) => {
+        // Refresh balance and counts
+        fetchBalance();
+        if (selectedGame) {
+            fetchAvailableCardCounts(selectedGame.id);
+        }
+
+        // Show card details
+        setPurchasedCard({
+            ...result.card,
+            packageData: selectedPackage
+        });
+        setIsDetailsModalOpen(true);
     };
 
     // Filter offers based on selected operator
@@ -612,6 +657,19 @@ const RechargeBalance = () => {
                                                         <div className="text-xl font-bold text-primary">
                                                             {pkg.price.toLocaleString()} د.ج
                                                         </div>
+
+                                                        {/* Availability Indicator */}
+                                                        <div className="mt-2 text-xs flex items-center gap-1">
+                                                            {(availableCardCounts[pkg.id] || 0) > 0 ? (
+                                                                <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                                                                    <CheckCircle2 className="w-3 h-3" /> متوفر
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-red-500 bg-red-50 px-2 py-0.5 rounded-full font-medium">
+                                                                    غير متوفر
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -624,6 +682,7 @@ const RechargeBalance = () => {
                                         <Button
                                             onClick={handleGameSubmit}
                                             className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700"
+                                            disabled={(availableCardCounts[selectedPackage.id] || 0) === 0}
                                         >
                                             {t('recharge_buy_card')} ({selectedPackage.price.toLocaleString()} د.ج)
                                         </Button>
@@ -635,6 +694,34 @@ const RechargeBalance = () => {
 
                 </div>
             </div>
+
+            {/* Purchase Dialog */}
+            {selectedPackage && (
+                <PurchaseCardDialog
+                    open={isPurchaseDialogOpen}
+                    onClose={() => setIsPurchaseDialogOpen(false)}
+                    packageData={selectedPackage}
+                    gameId={selectedGame?.id || ''}
+                    gameName={selectedGame?.name || ''}
+                    availableCount={availableCardCounts[selectedPackage.id] || 0}
+                    currentUserBalance={balance}
+                    onSuccess={handlePurchaseSuccess}
+                />
+            )}
+
+            {/* Post-Purchase Details Modal */}
+            {purchasedCard && (
+                <CardDetailsModal
+                    open={isDetailsModalOpen}
+                    onClose={() => {
+                        setIsDetailsModalOpen(false);
+                        setPurchasedCard(null);
+                    }}
+                    card={purchasedCard}
+                    packageName={selectedPackage?.name || ''}
+                    gameName={selectedGame?.name || ''}
+                />
+            )}
         </DashboardLayout>
     );
 };

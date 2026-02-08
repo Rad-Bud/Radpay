@@ -12,17 +12,25 @@ interface AddGameCardDialogProps {
     onOpenChange: (open: boolean) => void;
     onSubmit: (data: any) => Promise<void>;
     packages: any[];
+    preSelectedPackage?: any; // Optional pre-selected package
 }
 
-const AddGameCardDialog: React.FC<AddGameCardDialogProps> = ({ open, onOpenChange, onSubmit, packages }) => {
+const AddGameCardDialog: React.FC<AddGameCardDialogProps> = ({ open, onOpenChange, onSubmit, packages, preSelectedPackage }) => {
     const [activeTab, setActiveTab] = useState("manual");
     const [loading, setLoading] = useState(false);
     const [ocrLoading, setOcrLoading] = useState(false);
 
-    // Form Data
-    const [selectedPackage, setSelectedPackage] = useState("");
+    // Form Data - Initialize with pre-selected package if provided
+    const [selectedPackage, setSelectedPackage] = useState(preSelectedPackage?.id || "");
     const [code, setCode] = useState("");
     const [serialNumber, setSerialNumber] = useState("");
+
+    // Update selectedPackage when preSelectedPackage changes
+    React.useEffect(() => {
+        if (preSelectedPackage?.id) {
+            setSelectedPackage(preSelectedPackage.id);
+        }
+    }, [preSelectedPackage]);
 
     const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

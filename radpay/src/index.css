@@ -106,6 +106,46 @@
     /* Direction is handled dynamically by LanguageContext */
   }
 
+  /* RTL Support - Ensure text aligns properly */
+  html[dir="rtl"] {
+    text-align: right;
+  }
+
+  html[dir="rtl"] body,
+  html[dir="rtl"] p,
+  html[dir="rtl"] h1,
+  html[dir="rtl"] h2,
+  html[dir="rtl"] h3,
+  html[dir="rtl"] h4,
+  html[dir="rtl"] h5,
+  html[dir="rtl"] h6,
+  html[dir="rtl"] div,
+  html[dir="rtl"] span,
+  html[dir="rtl"] label,
+  html[dir="rtl"] button {
+    text-align: right;
+  }
+
+  /* LTR Support */
+  html[dir="ltr"] {
+    text-align: left;
+  }
+
+  html[dir="ltr"] body,
+  html[dir="ltr"] p,
+  html[dir="ltr"] h1,
+  html[dir="ltr"] h2,
+  html[dir="ltr"] h3,
+  html[dir="ltr"] h4,
+  html[dir="ltr"] h5,
+  html[dir="ltr"] h6,
+  html[dir="ltr"] div,
+  html[dir="ltr"] span,
+  html[dir="ltr"] label,
+  html[dir="ltr"] button {
+    text-align: left;
+  }
+
   body {
     @apply bg-background text-foreground font-cairo antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;

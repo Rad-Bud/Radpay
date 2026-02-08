@@ -116,6 +116,32 @@ router.post('/', async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/users/:id - Get Single User
+router.get('/:id', async (req: Request, res: Response) => {
+    try {
+        const id = req.params.id as string;
+        const userDoc = await db.collection('users').doc(id).get();
+        if (!userDoc.exists) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+
+        const userData = userDoc.data();
+        const walletDoc = await db.collection('wallets').doc(id).get();
+        const walletData = walletDoc.exists ? walletDoc.data() : {};
+
+        res.json({
+            id: userDoc.id,
+            ...userData,
+            balance: walletData?.balance || 0,
+            debt: walletData?.debt || 0
+        });
+    } catch (error) {
+        console.error('Error fetching user:', error);
+        res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+
 // POST /api/users/:uid/balance - Add Funds (Cash, Credit, Repay), Deduct, or Set Balance
 router.post('/:uid/balance', async (req: Request, res: Response) => {
     try {

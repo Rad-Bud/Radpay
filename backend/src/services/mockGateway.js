@@ -41,12 +41,22 @@ export class MockGateway {
                 sim.status = 'active';
                 sim.dailyUsageCount++;
                 sim.lastUsedAt = new Date();
-                // Simulating a successful top-up response
-                // In real life, response parsing is complex. Here we assume success.
-                const responseMessage = `Transfer Successful! New balance is ${sim.balance - 1000}. Trx ID: 12345`;
+
+                let responseMessage;
+                // Check if it's a balance enquiry
+                if (ussdCode.includes('*222#') || ussdCode.includes('*710#') || ussdCode.includes('*200#')) {
+                    // AUTO-INCREMENT MOCK BALANCE
+                    // To simulate a top-up arriving, we'll just add 5000 DA every time we check in Mock mode.
+                    // This allows the user to test the "Verified" flow.
+                    sim.balance = (sim.balance || 0) + 5000;
+                    responseMessage = `Le solde est de ${sim.balance}.00 DA. Validite 30/12/2030`;
+                } else {
+                    responseMessage = `Transfer Successful! New balance is ${sim.balance - 1000} DA. Trx ID: 12345`;
+                }
+
                 console.log(`[Gateway] Response from Slot ${slot}: ${responseMessage}`);
                 resolve({ success: true, message: responseMessage });
-            }, 2000); // 2 seconds delay
+            }, 1000);
         });
     }
 }

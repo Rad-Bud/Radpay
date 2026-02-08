@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -9,14 +10,31 @@ import { toast } from "sonner";
 const backendUrl = "http://localhost:3000/api";
 
 const Transactions = () => {
+    const { role, user } = useAuth(); // Get user object
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchTransactions = async () => {
             try {
-                const res = await fetch(`${backendUrl}/transactions`);
-                if (res.ok) setTransactions(await res.json());
+                const url = `${backendUrl}/transactions`;
+                console.log('[Transactions] Role:', role, 'UID:', user?.uid);
+
+                // Get auth token
+                const token = await user?.getIdToken();
+                const headers: HeadersInit = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const res = await fetch(url, { headers });
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('[Transactions] Received:', data.length, 'transactions');
+                    setTransactions(data);
+                } else {
+                    console.error('[Transactions] Error:', res.status, res.statusText);
+                }
             } catch (error) {
                 console.error("Failed to fetch transactions", error);
             } finally {
@@ -24,7 +42,7 @@ const Transactions = () => {
             }
         };
         fetchTransactions();
-    }, []);
+    }, [role, user?.uid]); // Add dependencies
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -62,6 +80,9 @@ const Transactions = () => {
                                 <TableHead className="text-right">نوع العملية</TableHead>
                                 <TableHead className="text-right">الوصف</TableHead>
                                 <TableHead className="text-right">المبلغ</TableHead>
+                                {((role as string) === 'admin' || (role as string) === 'super_admin' || (role as string) === 'wholesaler') && (
+                                    <TableHead className="text-right text-green-600">الربح</TableHead>
+                                )}
                                 <TableHead className="text-right">المستخدم</TableHead>
                                 <TableHead className="text-right">الحالة</TableHead>
                                 <TableHead className="text-right">التاريخ</TableHead>
@@ -69,10 +90,10 @@ const Transactions = () => {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={7} className="text-center">تحميل...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} className="text-center">تحميل...</TableCell></TableRow>
                             ) : transactions.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                                    <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                                         <div className="flex flex-col items-center gap-2">
                                             <HistoryIcon className="w-8 h-8 opacity-50" />
                                             <p>لا توجد عمليات مسجلة حتى الآن</p>
@@ -103,6 +124,19 @@ const Transactions = () => {
                                         <TableCell className={`font-bold ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
                                             {tx.type === 'deposit' ? '+' : '-'}{Number(tx.amount).toLocaleString()} د.ج
                                         </TableCell>
+
+                                        {/* PROFIT COLUMN */}
+                                        {((role as string) === 'admin' || (role as string) === 'super_admin') && (
+                                            <TableCell className="text-green-600 font-bold">
+                                                {tx.financials?.adminProfit ? `+${Number(tx.financials.adminProfit).toFixed(2)}` : '-'}
+                                            </TableCell>
+                                        )}
+                                        {(role as string) === 'wholesaler' && (
+                                            <TableCell className="text-green-600 font-bold">
+                                                {tx.financials?.wholesalerProfit ? `+${Number(tx.financials.wholesalerProfit).toFixed(2)}` : '-'}
+                                            </TableCell>
+                                        )}
+
                                         <TableCell className="text-sm font-medium">{tx.userName || tx.userId}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={tx.status === 'completed' ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}>

@@ -40,9 +40,16 @@ const getFlexyCode = async (operator: string, phone: string, amount: number, pin
     }
 };
 
+// Helper to get rates
+const getRates = async () => {
+    const doc = await db.collection('settings').doc('rates').get();
+    if (doc.exists) return doc.data();
+    return null;
+};
+
 // POST /api/recharge/flexy - Execute a Flexy recharge
 router.post('/flexy', authenticate, async (req, res) => {
-    const { uid } = req.user!; // Logged in merchant
+    const { uid, role } = req.user!; // Logged in merchant
     const { phoneNumber, amount, operator } = req.body;
 
     if (!phoneNumber || !amount || !operator) {
@@ -51,9 +58,57 @@ router.post('/flexy', authenticate, async (req, res) => {
 
     const rechargeAmount = Number(amount);
     let transactionId = '';
+    let deductionAmount = rechargeAmount; // Default to full amount
 
     try {
-        // 1. BALANCE CHECK & DEDUCTION (Atomic Transaction)
+        // 1. FETCH CONTEXT (User & Wholesaler) & Rates
+        const userDoc = await db.collection('users').doc(uid).get();
+        const userData = userDoc.data();
+        const wholesalerId = userData?.createdBy || null;
+
+        const rates = await getRates();
+
+        // 2. FINANCIAL CALCULATION
+        let financials = {};
+        if (rates) {
+            const opKey = operator.toLowerCase();
+            const retailerRate = rates.retailer?.[opKey] || 0;
+            const retailerCost = rechargeAmount * (1 - retailerRate / 100);
+
+            const wholesalerRate = rates.wholesaler?.[opKey] || 0;
+            const wholesalerCost = rechargeAmount * (1 - wholesalerRate / 100);
+
+            const adminRate = rates.admin?.[opKey] || 0;
+            const adminCost = rechargeAmount * (1 - adminRate / 100);
+
+            const wholesalerProfit = retailerCost - wholesalerCost;
+            const adminProfit = wholesalerCost - adminCost;
+
+            financials = {
+                retailerRate,
+                retailerCost,
+                wholesalerRate,
+                wholesalerCost,
+                adminRate,
+                adminCost,
+                wholesalerProfit,
+                adminProfit,
+                wholesalerId
+            };
+
+            // Determine deduction amount based on user role
+            if (role === 'super_admin' || role === 'admin') {
+                deductionAmount = adminCost;
+            } else if (role === 'wholesaler' || role === 'super_wholesaler') {
+                deductionAmount = wholesalerCost;
+            } else {
+                // retailer
+                deductionAmount = retailerCost;
+            }
+        }
+
+        // 3. ATOMIC DEDUCTION & TRANSACTION CREATION
+        // We do this in one transaction to ensure money isn't lost without a record
         await db.runTransaction(async (t) => {
             const walletRef = db.collection('wallets').doc(uid);
             const walletDoc = await t.get(walletRef);
@@ -63,36 +118,39 @@ router.post('/flexy', authenticate, async (req, res) => {
             }
 
             const currentBalance = walletDoc.data()?.balance || 0;
-            if (currentBalance < rechargeAmount) {
-                throw new Error('رصيد غير كافي (Insufficient balance)');
+
+            if (currentBalance < deductionAmount) {
+                throw new Error('رصيد غير كافي');
             }
 
             // Deduct balance
-            t.update(walletRef, { balance: currentBalance - rechargeAmount });
+            t.update(walletRef, { balance: currentBalance - deductionAmount });
+
+            // Create Transaction Record
+            const newTx = {
+                userId: uid,
+                type: 'flexy',
+                operator,
+                phoneNumber,
+                amount: rechargeAmount, // Face Value
+                status: 'processing',
+                createdAt: new Date().toISOString(),
+                description: `Flexy ${operator} to ${phoneNumber}`,
+                financials
+            };
+
+            const txRef = db.collection('transactions').doc(); // Auto-ID
+            transactionId = txRef.id; // Capture ID for later use
+            t.set(txRef, newTx);
         });
 
-        // 2. CREATE TRANSACTION RECORD (Pending)
-        const newTx = {
-            userId: uid,
-            type: 'flexy',
-            operator,
-            phoneNumber,
-            amount: rechargeAmount,
-            status: 'processing',
-            createdAt: new Date().toISOString(),
-            description: `Flexy ${operator} to ${phoneNumber}`
-        };
-        const txRef = await db.collection('transactions').add(newTx);
-        transactionId = txRef.id;
-
-        // 3. FIND SUITABLE SIM
-        // Find an active SIM for the requested operator
+        // 4. FIND SUITABLE SIM
         const simsSnapshot = await db.collection('sims')
             .where('operator', '==', operator)
             .where('status', '==', 'active')
             .get();
 
-        const activeSim = simsSnapshot.docs[0]; // Simple selection strategy: pick first active
+        const activeSim = simsSnapshot.docs[0];
 
         if (!activeSim) {
             throw new Error(`No active SIM found for operator: ${operator}`);
@@ -103,7 +161,7 @@ router.post('/flexy', authenticate, async (req, res) => {
         const gatewayIp = simData.port;
         const simPin = simData.pin || '0000';
 
-        // 4. EXECUTE USSD
+        // 5. EXECUTE USSD
         const ussdCode = await getFlexyCode(operator, phoneNumber, rechargeAmount, simPin);
 
         let result = { success: false, message: '' };
@@ -113,12 +171,12 @@ router.post('/flexy', authenticate, async (req, res) => {
             result = await zteGateway.sendUSSD(gatewayIp, ussdCode);
         } else {
             console.log(`[Recharge] Executing Mock USSD on SIM ${simId}: ${ussdCode}`);
-            // Simulate processing time
             await new Promise(resolve => setTimeout(resolve, 2000));
+            // Mock Success for now unless specific amount triggers fail
             result = await gateway.sendUSSD(Number(simId) || 1, ussdCode);
         }
 
-        // 5. UPDATE TRANSACTION STATUS
+        // 6. UPDATE TRANSACTION STATUS
         if (result.success) {
             await db.collection('transactions').doc(transactionId).update({
                 status: 'completed',
@@ -141,31 +199,31 @@ router.post('/flexy', authenticate, async (req, res) => {
     } catch (error: any) {
         console.error('[Recharge Flexy] Error:', error.message);
 
-        // REFUND LOGIC
-        // If we deduced balance but failed, we must refund.
-        // NOTE: If the runTransaction failed (e.g. insufficient funds), we didn't deduct yet, so no refund needed.
-        // We need to know if deduction happened.
-        // A simpler way is to check if transactionId exists. If it exists, it means we passed the deduction phase.
-
+        // COMPENSATING TRANSACTION (REFUND)
         if (transactionId) {
-            await db.runTransaction(async (t) => {
-                const walletRef = db.collection('wallets').doc(uid);
-                const walletDoc = await t.get(walletRef);
-                const currentBalance = walletDoc.data()?.balance || 0;
+            try {
+                await db.runTransaction(async (t) => {
+                    const walletRef = db.collection('wallets').doc(uid);
+                    const txRef = db.collection('transactions').doc(transactionId);
 
-                // Refund
-                t.update(walletRef, {
-                    balance: currentBalance + rechargeAmount
-                });
+                    const walletDoc = await t.get(walletRef);
+                    const currentBalance = walletDoc.data()?.balance || 0;
 
-                // Update Tx to failed
-                const txRef = db.collection('transactions').doc(transactionId);
-                t.update(txRef, {
-                    status: 'failed',
-                    error: error.message,
-                    failedAt: new Date().toISOString()
+                    // Refund the EXACT DEDUCTED AMOUNT
+                    t.update(walletRef, {
+                        balance: currentBalance + deductionAmount // Use the outer variable which has correct cost
+                    });
+
+                    t.update(txRef, {
+                        status: 'failed',
+                        error: error.message,
+                        failedAt: new Date().toISOString()
+                    });
                 });
-            });
+                console.log(`[Recharge] Refunded ${deductionAmount} to ${uid} for failed tx ${transactionId}`);
+            } catch (refundError) {
+                console.error('CRITICAL: Failed to refund user after recharge failure', refundError);
+            }
         }
 
         res.status(400).json({
@@ -178,7 +236,7 @@ router.post('/flexy', authenticate, async (req, res) => {
 
 // POST /api/recharge/offer - Execute an Offer recharge
 router.post('/offer', authenticate, async (req, res) => {
-    const { uid } = req.user!;
+    const { uid, role } = req.user!;
     const { phoneNumber, offerId } = req.body;
 
     if (!phoneNumber || !offerId) {
@@ -187,26 +245,75 @@ router.post('/offer', authenticate, async (req, res) => {
 
     let transactionId = '';
     let price = 0;
+    let deductionAmount = 0;
 
     try {
-        // 1. Fetch Offer details
+        // 1. Fetch Offer details and user context
         const offerDoc = await db.collection('offers').doc(offerId).get();
         if (!offerDoc.exists) throw new Error('Offer not found');
         const offerData = offerDoc.data()!;
         price = Number(offerData.price);
         const operator = offerData.operator;
 
-        // 2. BALANCE CHECK & DEDUCTION
+        const userDoc = await db.collection('users').doc(uid).get();
+        const userData = userDoc.data();
+        const wholesalerId = userData?.createdBy || null;
+
+        const rates = await getRates();
+
+        // 2. FINANCIAL CALCULATION
+        let financials = {};
+        if (rates) {
+            const opKey = operator.toLowerCase();
+            const retailerRate = rates.retailer?.[opKey] || 0;
+            const retailerCost = price * (1 - retailerRate / 100);
+
+            const wholesalerRate = rates.wholesaler?.[opKey] || 0;
+            const wholesalerCost = price * (1 - wholesalerRate / 100);
+
+            const adminRate = rates.admin?.[opKey] || 0;
+            const adminCost = price * (1 - adminRate / 100);
+
+            const wholesalerProfit = retailerCost - wholesalerCost;
+            const adminProfit = wholesalerCost - adminCost;
+
+            financials = {
+                retailerRate,
+                retailerCost,
+                wholesalerRate,
+                wholesalerCost,
+                adminRate,
+                adminCost,
+                wholesalerProfit,
+                adminProfit,
+                wholesalerId
+            };
+
+            // Determine deduction amount based on user role
+            if (role === 'super_admin' || role === 'admin') {
+                deductionAmount = adminCost;
+            } else if (role === 'wholesaler' || role === 'super_wholesaler') {
+                deductionAmount = wholesalerCost;
+            } else {
+                // retailer
+                deductionAmount = retailerCost;
+            }
+        } else {
+            // No rates configured, use full price
+            deductionAmount = price;
+        }
+
+        // 3. BALANCE CHECK & DEDUCTION
         await db.runTransaction(async (t) => {
             const walletRef = db.collection('wallets').doc(uid);
             const walletDoc = await t.get(walletRef);
             if (!walletDoc.exists) throw new Error('Merchant wallet not found');
             const currentBalance = walletDoc.data()?.balance || 0;
-            if (currentBalance < price) throw new Error('Insufficient balance');
-            t.update(walletRef, { balance: currentBalance - price });
+            if (currentBalance < deductionAmount) throw new Error('رصيد غير كافي');
+            t.update(walletRef, { balance: currentBalance - deductionAmount });
         });
 
-        // 3. CREATE TRANSACTION
+        // 4. CREATE TRANSACTION
         const newTx = {
             userId: uid,
             type: 'offer',
@@ -216,7 +323,8 @@ router.post('/offer', authenticate, async (req, res) => {
             amount: price,
             status: 'processing',
             createdAt: new Date().toISOString(),
-            description: `Offer ${offerData.name} to ${phoneNumber}`
+            description: `Offer ${offerData.name} to ${phoneNumber}`,
+            financials
         };
         const txRef = await db.collection('transactions').add(newTx);
         transactionId = txRef.id;
@@ -267,12 +375,12 @@ router.post('/offer', authenticate, async (req, res) => {
     } catch (error: any) {
         console.error('[Recharge Offer] Error:', error.message);
         // Refund
-        if (transactionId && price > 0) {
+        if (transactionId && deductionAmount > 0) {
             await db.runTransaction(async (t) => {
                 const walletRef = db.collection('wallets').doc(uid);
                 const walletDoc = await t.get(walletRef);
                 const currentBalance = walletDoc.data()?.balance || 0;
-                t.update(walletRef, { balance: currentBalance + price });
+                t.update(walletRef, { balance: currentBalance + deductionAmount });
 
                 const txRef = db.collection('transactions').doc(transactionId);
                 t.update(txRef, { status: 'failed', error: error.message, failedAt: new Date().toISOString() });

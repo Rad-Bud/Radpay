@@ -61,13 +61,47 @@ router.delete('/:id', async (req, res) => {
 // POST /api/games/:id/packages - Add a package to a game
 router.post('/:id/packages', async (req, res) => {
     try {
-        const { name, price, costPrice } = req.body;
-        if (!name || !price) return res.status(400).json({ error: 'Name and Price are required' });
+        const { name, purchasePrice, wholesalerPrice, retailerPrice, customerPrice, price, costPrice } = req.body;
+        if (!name) return res.status(400).json({ error: 'Name is required' });
+
+        // Support both new (4-tier) and legacy (2-tier) pricing
+        let finalPurchasePrice, finalWholesalerPrice, finalRetailerPrice, finalCustomerPrice;
+
+        if (purchasePrice !== undefined) {
+            // New 4-tier pricing
+            finalPurchasePrice = Number(purchasePrice);
+            finalWholesalerPrice = Number(wholesalerPrice);
+            finalRetailerPrice = Number(retailerPrice);
+            finalCustomerPrice = Number(customerPrice);
+
+            // Validate pricing is ascending
+            if (finalPurchasePrice >= finalWholesalerPrice ||
+                finalWholesalerPrice >= finalRetailerPrice ||
+                finalRetailerPrice >= finalCustomerPrice) {
+                return res.status(400).json({
+                    error: 'الأسعار يجب أن تكون تصاعدية: شراء < جملة < تجزئة < زبون'
+                });
+            }
+        } else {
+            // Legacy 2-tier pricing (backward compatibility)
+            finalPurchasePrice = Number(costPrice) || 0;
+            finalCustomerPrice = Number(price);
+            // Set intermediate prices as averages
+            const diff = (finalCustomerPrice - finalPurchasePrice) / 3;
+            finalWholesalerPrice = finalPurchasePrice + diff;
+            finalRetailerPrice = finalPurchasePrice + (diff * 2);
+        }
 
         const newPackage = {
             name,
-            price: Number(price),
-            costPrice: Number(costPrice) || 0,
+            // New 4-tier pricing
+            purchasePrice: finalPurchasePrice,
+            wholesalerPrice: finalWholesalerPrice,
+            retailerPrice: finalRetailerPrice,
+            customerPrice: finalCustomerPrice,
+            // Legacy fields (for backward compatibility)
+            price: finalCustomerPrice,
+            costPrice: finalPurchasePrice,
             active: true,
             createdAt: new Date().toISOString()
         };
@@ -75,6 +109,7 @@ router.post('/:id/packages', async (req, res) => {
         const docRef = await db.collection('games').doc(req.params.id).collection('packages').add(newPackage);
         res.status(201).json({ id: docRef.id, ...newPackage });
     } catch (error) {
+        console.error('Error adding package:', error);
         res.status(500).json({ error: 'Failed to add package' });
     }
 });

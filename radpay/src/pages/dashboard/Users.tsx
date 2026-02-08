@@ -490,7 +490,10 @@ const Users = () => {
                             </div>
                             <div className="space-y-2">
                                 <Label>نوع الحساب</Label>
-                                <Select onValueChange={(val) => setFormData(prev => ({ ...prev, role: val }))} value={formData.role}>
+                                <Select
+                                    value={formData.role}
+                                    disabled={true}
+                                >
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="wholesaler">بائع جملة</SelectItem>

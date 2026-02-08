@@ -48,7 +48,6 @@ const App = () => (
                   {/* Users - Super Admin & Wholesaler */}
                   <Route element={<ProtectedRoute allowedRoles={['super_admin', 'wholesaler']} />}>
                     <Route path="/dashboard/users" element={<Users />} />
-                    <Route path="/dashboard/financials" element={<Financials />} />
                   </Route>
 
                   {/* Super Admin Only */}
@@ -60,6 +59,7 @@ const App = () => (
                   </Route>
 
                   {/* All Authenticated Users */}
+                  <Route path="/dashboard/financials" element={<Financials />} />
                   <Route path="/dashboard/notifications" element={<Notifications />} />
                   <Route path="/dashboard/complaints" element={<Complaints />} />
                   <Route path="/dashboard/transactions" element={<Transactions />} />

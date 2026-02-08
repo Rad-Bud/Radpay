@@ -47,9 +47,9 @@ const menuItemsByRole: Record<string, Array<{ icon: any; label: string; href: st
     ],
     retailer: [
         { icon: LayoutDashboard, label: "nav_dashboard", href: "/dashboard" },
-        { icon: Wallet, label: "nav_balance", href: "/dashboard/balance" },
-        { icon: History, label: "nav_operations", href: "/dashboard/transactions" },
-
+        { icon: Smartphone, label: "nav_recharge", href: "/dashboard/recharge-balance" },
+        { icon: Wallet, label: "nav_financials", href: "/dashboard/financials" },
+        { icon: History, label: "nav_transactions", href: "/dashboard/transactions" },
     ]
 };
 

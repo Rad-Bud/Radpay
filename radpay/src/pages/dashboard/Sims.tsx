@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Smartphone, Signal, Power, Search, Settings, RefreshCw, Wallet, CheckCircle, Clock, AlertTriangle, Scale } from "lucide-react";
+import { Plus, Edit, Trash2, Smartphone, Signal, Power, Search, Settings, RefreshCw, Wallet, CheckCircle, Clock, AlertTriangle, Scale, Banknote } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { auth } from "@/lib/firebase";
 
@@ -16,6 +16,7 @@ const Sims = () => {
     const { t } = useLanguage();
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
+    const [isPurchaseOpen, setIsPurchaseOpen] = useState(false); // New State
 
     const [sims, setSims] = useState<any[]>([]);
     const [stats, setStats] = useState({ completed: 0, pending: 0 });
@@ -31,6 +32,17 @@ const Sims = () => {
         balance: "",
         status: "active"
     });
+
+    // Purchase Form Data
+    const [purchaseData, setPurchaseData] = useState({
+        amount: "",
+        discountRate: "0"
+    });
+
+    // Purchase UI States
+    const [isPurchaseLoading, setIsPurchaseLoading] = useState(false);
+    const [purchaseStep, setPurchaseStep] = useState<'input' | 'verifying'>('input');
+    const [initialBalance, setInitialBalance] = useState<number>(0);
 
     // Settings State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -289,6 +301,169 @@ const Sims = () => {
             case 'djezzy': return 'bg-red-600';
             case 'ooredoo': return 'bg-yellow-500';
             default: return 'bg-gray-500';
+        }
+    };
+
+    // Purchase Handlers
+    const handlePurchaseClick = async (sim: any) => {
+        setSelectedSim(sim);
+        // Default state
+        setPurchaseData({
+            amount: "",
+            discountRate: "0"
+        });
+        setPurchaseStep('input');
+        setIsPurchaseLoading(false);
+        // Track the balance BEFORE we start any refreshes or topups
+        const startBalance = Number(sim.balance) || 0;
+        setInitialBalance(startBalance);
+        setIsPurchaseOpen(true);
+
+        // Auto-fetch latest discount
+        try {
+            const res = await fetchWithAuth(`${backendUrl}/sims/purchases/latest?operator=${sim.operator}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.discountRate !== undefined) {
+                    setPurchaseData(prev => ({
+                        ...prev,
+                        discountRate: String(data.discountRate)
+                    }));
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch latest purchase info", error);
+        }
+
+        // Auto-refresh balance to get latest truth? 
+        // If we refresh immediately, and the top-up hasn't happened yet (user just opened modal),
+        // we essentially just confirm the 'initialBalance'.
+        // If the user ALREADY topped up before opening the modal, this refresh might catch it.
+        // But then 'initialBalance' would be the ALREADY topped up value?
+        // Scenario: 
+        // 1. User opens modal. System refreshes. Balance=1000.  Initial=1000.
+        // 2. User physically tops up 3000. 
+        // 3. User clicks "Refresh". System finds 4000.
+        // 4. 4000 >= 1000 + 3000. OK.
+
+        // Update: refreshSimBalanceInternal should NOT update initialBalance only selectedSim.
+        refreshSimBalanceInternal(sim, true); // Pass true to indicate 'initial/mount' check
+    };
+
+    const refreshSimBalanceInternal = async (sim: any, isMount = false) => {
+        setIsPurchaseLoading(true);
+        let code = "";
+        if (sim.operator === "mobilis") code = ussdConfig.mobilis || "*222#";
+        else if (sim.operator === "djezzy") code = ussdConfig.djezzy || "*710#";
+        else if (sim.operator === "ooredoo") code = ussdConfig.ooredoo || "*200#";
+        if (!code) code = "*222#";
+
+        try {
+            const res = await fetchWithAuth(`${backendUrl}/gateway/ussd`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slot: sim.id, code })
+            });
+
+            if (res.ok) {
+                // If successful, we should reload the SIM data to get the parsed balance
+                // But typically the gateway/ussd endpoint might return the raw text.
+                // We rely on fetchSims() updating the list.
+                await fetchSims();
+                // We need to update selectedSim with the new balance from the list
+                // Since fetchSims updates 'sims' state, we need to read from there?
+                // Actually, let's just wait a bit or re-find the sim
+                const updatedSimsRes = await fetchWithAuth(`${backendUrl}/sims`);
+                const updatedSims = await updatedSimsRes.json();
+                const found = updatedSims.find((s: any) => s.id === sim.id);
+                if (found) {
+                    setSelectedSim(found);
+                    if (isMount) {
+                        setInitialBalance(Number(found.balance));
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Auto-refresh failed", error);
+        } finally {
+            setIsPurchaseLoading(false);
+        }
+    };
+
+    const handleVerifyAndSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedSim) return;
+
+        const currentBal = Number(selectedSim.balance) || 0;
+        const amount = Number(purchaseData.amount);
+
+        // Expected total is Initial + Amount? 
+        // Or Current + Amount? 
+        // If user refreshed multiple times, 'selectedSim' is current.
+        // But verification is: Has it reached (Initial + Amount)?
+        // Use Initial for the mathematical target.
+        const targetBal = initialBalance + amount;
+
+        if (amount <= 0) {
+            alert("يرجى إدخال مبلغ صحيح");
+            return;
+        }
+
+        // Check if we are in verification step
+        if (purchaseStep === 'input') {
+            // Move to verification
+            setPurchaseStep('verifying');
+            // Trigger USSD Check
+            await refreshSimBalanceInternal(selectedSim);
+            // The user will see the balance update. 
+            // If it matches expected, they can confirm in the next click?
+            // Actually, the user wants "Check -> If Confirmed -> Pass"
+            // So we just stay in 'verifying' state and button becomes "Confirm & Save"
+            return;
+        }
+
+        // In Verifying Step: Check if balance arrived
+        // We use the 'selectedSim.balance' which should have been updated by the refresh above
+        // We allow some small margin or just strict check?
+        // Let's warn if strictly less than expected
+        // STRICT BLOCKING:
+        if (currentBal < targetBal) {
+            alert(`خطأ: الرصيد لم يصل بعد!\nالرصيد الحالي: ${currentBal}\nالرصيد المتوقع: ${targetBal}\nيرجى الانتظار واعادة التحقق.`);
+            // Remain in verifying step, do not save.
+            // But we might want to refresh again?
+            // The button is "Confirm". The user clicked it expecting it to work.
+            // We blocked it. They can click "Refresh" (Wait, the button is confirm).
+            // We should probably have a separate "Refresh" button in verifying step OR 
+            // allow the "Confirm" button to trigger a refresh logic if it fails?
+            // Current flow: "Refresh" (step 1) -> "Confirm" (step 2).
+            // If checking fails in step 2, we should probably stay there or maybe revert to step 1 automatically?
+            // Let's just output the alert and let them try again (maybe we can add a 'refresh' icon button separately or just switch step back to input?)
+            setPurchaseStep('input'); // Switch back to 'input' so they can click 'Refresh' again easily.
+            return;
+        }
+
+        // Proceed to Save
+        try {
+            const res = await fetchWithAuth(`${backendUrl}/sims/${selectedSim.id}/purchase`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    newBalance: currentBal, // Save the actual confirmed balance
+                    discountRate: Number(purchaseData.discountRate)
+                })
+            });
+
+            if (res.ok) {
+                alert("تم تسجيل عملية الشراء بنجاح!");
+                setIsPurchaseOpen(false);
+                fetchSims();
+                fetchFinancials();
+            } else {
+                const err = await res.json();
+                alert(`فشل العملية: ${err.error}`);
+            }
+        } catch (error) {
+            alert("فشل الاتصال بالسيرفر");
         }
     };
 
@@ -669,6 +844,9 @@ const Sims = () => {
                                         <Button variant="ghost" size="sm" onClick={() => handleRefreshBalance(sim)} title="تحديث الرصيد">
                                             <RefreshCw className="w-4 h-4 text-blue-600" />
                                         </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handlePurchaseClick(sim)} title="شراء رصيد (Top-up)">
+                                            <Banknote className="w-4 h-4 text-emerald-600" />
+                                        </Button>
                                         <Button variant="ghost" size="sm" onClick={() => handleEditClick(sim)}>
                                             <Edit className="w-4 h-4" />
                                         </Button>
@@ -747,8 +925,162 @@ const Sims = () => {
                     </form>
                 </DialogContent>
             </Dialog>
+            {/* Purchase Modal */}
+            <Dialog open={isPurchaseOpen} onOpenChange={setIsPurchaseOpen}>
+                <DialogContent className="sm:max-w-[500px] text-right" dir="rtl">
+                    <DialogHeader className="text-right">
+                        <DialogTitle>شراء رصيد (Top-up)</DialogTitle>
+                        <DialogDescription>
+                            تسجيل عملية شراء رصيد جديدة للشريحة
+                        </DialogDescription>
+                    </DialogHeader>
+                    {selectedSim && (
+                        <form onSubmit={handleVerifyAndSubmit} className="space-y-4 py-4">
+                            {/* Status Indicator */}
+                            {isPurchaseLoading && (
+                                <div className="bg-blue-50 text-blue-700 p-3 rounded-md flex items-center gap-2 text-sm justify-center mb-2">
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    جاري تحديث الرصيد من الشبكة...
+                                </div>
+                            )}
+
+                            {/* Strict Verification Alert */}
+                            {!isPurchaseLoading && purchaseStep === 'verifying' && (() => {
+                                const current = Number(selectedSim.balance) || 0;
+                                const amount = Number(purchaseData.amount) || 0;
+                                const target = initialBalance + amount;
+                                const isArrived = current >= target;
+
+                                return (
+                                    <div className={`p-3 rounded-md flex items-center gap-3 text-sm mb-2 border ${isArrived ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                        {isArrived ? (
+                                            <>
+                                                <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                                                <span>تم التحقق من وصول الرصيد بنجاح! يمكن الحفظ الآن.</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="font-bold">تنبيه: الرصيد لم يصل بعد!</span>
+                                                    <span>المتوقع: {target.toLocaleString()} | الحالي: {current.toLocaleString()}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            <div className="p-3 bg-muted/50 rounded-lg flex justify-between items-center">
+                                <span className="text-sm font-medium">الرصيد الحالي (المحقق):</span>
+                                <div className="text-left">
+                                    <span className="font-bold font-mono text-lg block">{Number(selectedSim.balance).toLocaleString()} د.ج</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>المتعامل</Label>
+                                    <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/20">
+                                        <div className={`w-3 h-3 rounded-full ${getOperatorColor(selectedSim.operator)}`} />
+                                        <span className="capitalize">{selectedSim.operator}</span>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>رقم الهاتف</Label>
+                                    <div className="p-2 border rounded-md bg-muted/20 font-mono text-left">
+                                        {selectedSim.phone}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="amount">مبلغ التعبئة (د.ج)</Label>
+                                <Input
+                                    id="amount"
+                                    type="number"
+                                    value={purchaseData.amount}
+                                    onChange={(e) => {
+                                        setPurchaseData(prev => ({ ...prev, amount: e.target.value }));
+                                        setPurchaseStep('input');
+                                    }}
+                                    placeholder="مثلاً: 3000"
+                                    required
+                                    className="font-mono text-lg border-primary/20 focus:border-primary"
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="discountRate">نسبة التخفيض (%)</Label>
+                                <Input
+                                    id="discountRate"
+                                    type="number"
+                                    step="0.1"
+                                    value={purchaseData.discountRate}
+                                    onChange={(e) => setPurchaseData(prev => ({ ...prev, discountRate: e.target.value }))}
+                                    placeholder="مثلاً: 6"
+                                    className="font-mono"
+                                />
+                            </div>
+
+                            {/* Calculations Preview */}
+                            <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-dashed">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground mr-1">نسبة التخفيض:</span>
+                                    <span className="font-bold text-emerald-600">{purchaseData.discountRate}%</span>
+                                </div>
+                                <div className="divide-x divide-x-reverse border-t my-2"></div>
+                                <div className="flex justify-between items-center text-base">
+                                    <span className="font-bold text-foreground">التكلفة الحقيقة (الدفع):</span>
+                                    <span className="font-bold text-xl text-emerald-600">
+                                        {(Number(purchaseData.amount) * (1 - (Number(purchaseData.discountRate) / 100))).toLocaleString()} د.ج
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Strict Verification Logic:
+                                The user can only Confirm if they have "Refreshed" AND we (optionally) see a change?
+                                Actually, purely blocking based on 'step' is good enough. 
+                                "Refresh" moves to "Verifying". 
+                                The user checks the "Current Balance" visually.
+                                If the user sees it hasn't arrived, they shouldn't click Confirm.
+                                BUT USER ASKED: "If it didn't arrive, cannot confirm".
+                                This implies automatic check.
+                                For automatic check, we need 'initialBalance'.
+                                I'll add 'initialBalance' state in the component logic (next tool call) and use it here.
+                            */}
+
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setIsPurchaseOpen(false)}>إلغاء</Button>
+                                <Button
+                                    type="submit"
+                                    className={`gap-2 ${purchaseStep === 'verifying' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                                    disabled={isPurchaseLoading}
+                                >
+                                    {isPurchaseLoading ? (
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : purchaseStep === 'input' ? (
+                                        <>
+                                            <RefreshCw className="w-4 h-4" />
+                                            تحقق من الوصول (Refresh)
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Banknote className="w-4 h-4" />
+                                            تأكيد وحفظ (Confirm)
+                                        </>
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+
         </DashboardLayout>
     );
 };
 
 export default Sims;
+

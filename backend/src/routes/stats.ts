@@ -17,32 +17,62 @@ router.get('/dashboard', authenticate, async (req, res) => {
         const todayStart = getTodayStart();
         const { uid, role } = req.user!;
 
+        console.log(`[Dashboard Stats] User: ${uid}, Role: ${role}`);
+
         // --- Role-Based Filtering Setup ---
-        let transactionQuery: FirebaseFirestore.Query = db.collection('transactions');
+        let userIdsToInclude: string[] = [];
 
-        // If Wholesaler, only their own transactions (performed by them)
-        if (role === 'wholesaler' || role === 'retailer') {
-            transactionQuery = transactionQuery.where('performedBy', '==', uid);
+        if (role === 'retailer') {
+            // Retailer: Only their own data
+            userIdsToInclude = [uid];
+        } else if (role === 'wholesaler') {
+            // Wholesaler: Their own + their retailers
+            const retailersSnapshot = await db.collection('users')
+                .where('createdBy', '==', uid)
+                .where('role', '==', 'retailer')
+                .get();
+
+            const retailerIds = retailersSnapshot.docs.map(doc => doc.id);
+            userIdsToInclude = [uid, ...retailerIds];
+            console.log(`[Dashboard Stats] Wholesaler ${uid} managing ${retailerIds.length} retailers`);
+        }
+        // Admin/Super Admin: No filtering (see all)
+
+        // 1. Fetch Transactions (Today for time analysis)
+        let txQuery: FirebaseFirestore.Query = db.collection('transactions')
+            .where('createdAt', '>=', todayStart);
+
+        if (userIdsToInclude.length > 0) {
+            // Firestore 'in' supports max 10 items
+            if (userIdsToInclude.length <= 10) {
+                txQuery = txQuery.where('userId', 'in', userIdsToInclude);
+            }
         }
 
-        // 1. Fetch Transactions (Recent for analysis)
-        const txSnapshot = await transactionQuery
-            .where('createdAt', '>=', todayStart)
-            .get();
+        const txSnapshot = await txQuery.get();
+        let transactions = txSnapshot.docs.map(doc => doc.data());
 
-        // For history
-        let allTxQuery: FirebaseFirestore.Query = db.collection('transactions');
-        if (role === 'wholesaler' || role === 'retailer') {
-            allTxQuery = allTxQuery.where('performedBy', '==', uid);
+        // If more than 10 users, filter in-memory
+        if (userIdsToInclude.length > 10) {
+            transactions = transactions.filter((tx: any) => userIdsToInclude.includes(tx.userId));
         }
 
-        const allTxSnapshot = await allTxQuery
+        console.log(`[Dashboard Stats] Found ${transactions.length} transactions for today`);
+
+        // 2. Fetch All Transactions (for history/trends)
+        let allTxQuery: FirebaseFirestore.Query = db.collection('transactions')
             .orderBy('createdAt', 'desc')
-            .limit(1000)
-            .get();
+            .limit(1000);
 
-        const transactions = txSnapshot.docs.map(doc => doc.data());
-        const historyTx = allTxSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        const allTxSnapshot = await allTxQuery.get();
+        let historyTx = allTxSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+
+        // Filter history by role
+        if (userIdsToInclude.length > 0) {
+            historyTx = historyTx.filter((tx: any) => userIdsToInclude.includes(tx.userId));
+        }
+
+        console.log(`[Dashboard Stats] Found ${historyTx.length} historical transactions`);
 
         // 2. Fetch Users (for Location/Dealer analysis)
         const usersSnapshot = await db.collection('users').get();
@@ -67,70 +97,99 @@ router.get('/dashboard', authenticate, async (req, res) => {
         let totalGameCardsBalance = 0;
         let totalInternetCardsBalance = 0;
 
-        // A. Total SIMs Balance
-        const simsSnapshot = await db.collection('sims').get();
-        console.log(`[Stats] Found ${simsSnapshot.size} SIMs`);
+        // ONLY Calculate for Super Admins
+        if (role === 'super_admin') {
 
-        totalSimsBalance = simsSnapshot.docs.reduce((acc, doc) => {
-            const data = doc.data();
-            const bal = Number(data.balance);
-            // console.log(`[Stats] SIM ${doc.id} Balance: ${data.balance} -> ${bal}`);
-            return acc + (isNaN(bal) ? 0 : bal);
-        }, 0);
-        console.log(`[Stats] Total Calculated Sims Balance: ${totalSimsBalance}`);
+            // A. Total SIMs Balance
+            const simsSnapshot = await db.collection('sims').get();
+            // console.log(`[Stats] Found ${simsSnapshot.size} SIMs`);
+
+            totalSimsBalance = simsSnapshot.docs.reduce((acc, doc) => {
+                const data = doc.data();
+                const bal = Number(data.balance);
+                return acc + (isNaN(bal) ? 0 : bal);
+            }, 0);
+            // console.log(`[Stats] Total Calculated Sims Balance: ${totalSimsBalance}`);
 
 
-        // B. Cards Balance (Games vs Internet)
-        // 1. Build Price Map from Games/Packages
-        const gamesSnapshot = await db.collection('games').get();
-        const priceMap: Record<string, number> = {}; // category/name -> price
+            // B. Cards Balance (Games vs Internet)
+            // 1. Build Price Map from Games/Packages
+            const gamesSnapshot = await db.collection('games').get();
+            const priceMap: Record<string, number> = {}; // category/name -> price
 
-        // Fetch all packages for all games
-        // Optimization: Use Promise.all
-        await Promise.all(gamesSnapshot.docs.map(async (gameDoc) => {
-            const pkgs = await gameDoc.ref.collection('packages').get();
-            pkgs.docs.forEach(pkg => {
-                const pData = pkg.data();
-                // Normalize name for lookup
-                if (pData.name) priceMap[pData.name.trim()] = Number(pData.price) || 0;
+            await Promise.all(gamesSnapshot.docs.map(async (gameDoc) => {
+                const pkgs = await gameDoc.ref.collection('packages').get();
+                pkgs.docs.forEach(pkg => {
+                    const pData = pkg.data();
+                    if (pData.name) priceMap[pData.name.trim()] = Number(pData.price) || 0;
+                });
+            }));
+
+            // 2. Fetch Available Cards
+            const cardsSnapshot = await db.collection('cards').where('status', '==', 'available').get();
+
+            cardsSnapshot.docs.forEach(doc => {
+                const card = doc.data();
+                let price = 0;
+                if (card.category && priceMap[card.category.trim()]) {
+                    price = priceMap[card.category.trim()];
+                }
+
+                const op = (card.operator || '').toLowerCase();
+                const cat = (card.category || '').toLowerCase();
+                const isInternet = ['idoom', '4g', 'adsl', 'internet'].some(k => op.includes(k) || cat.includes(k));
+
+                if (isInternet) {
+                    totalInternetCardsBalance += price;
+                } else {
+                    totalGameCardsBalance += price;
+                }
             });
-        }));
-
-        // 2. Fetch Available Cards
-        const cardsSnapshot = await db.collection('cards').where('status', '==', 'available').get();
-
-        cardsSnapshot.docs.forEach(doc => {
-            const card = doc.data();
-            // Pricing Lookup
-            // Try explicit matching, or fallback to known patterns if pricing is missing
-            let price = 0;
-            if (card.category && priceMap[card.category.trim()]) {
-                price = priceMap[card.category.trim()];
-            }
-
-            // Categorize: Internet vs Games
-            // Heuristic: Check operator or category for "idoom", "4g", "adsl"
-            const op = (card.operator || '').toLowerCase();
-            const cat = (card.category || '').toLowerCase();
-            const isInternet = ['idoom', '4g', 'adsl', 'internet'].some(k => op.includes(k) || cat.includes(k));
-
-            if (isInternet) {
-                totalInternetCardsBalance += price;
-            } else {
-                totalGameCardsBalance += price;
-            }
-        });
+        }
 
 
         // --- KPI Calculations ---
         const totalTransactions = transactions.length;
-        const totalRevenue = transactions
+
+        // Calculate Total Spent (money that left accounts)
+        const totalSpent = transactions
             .filter(t => t.status === 'completed')
             .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+
         const failedTransactions = transactions.filter(t => t.status === 'failed').length;
 
         // Active Dealers (users who made a transaction today)
         const activeDealersCount = new Set(transactions.map((t: any) => t.userId)).size;
+
+        // --- Spending Breakdown by User ---
+        const spendingByUserMap: Record<string, { userId: string, userName: string, role: string, totalSpent: number }> = {};
+
+        historyTx.forEach((tx: any) => {
+            if (tx.status !== 'completed') return;
+
+            const user = usersMap.get(tx.userId);
+            if (!user) return;
+
+            // Apply role-based filtering
+            if (role === 'wholesaler' && user.createdBy !== uid && user.id !== uid) return;
+            if (role === 'retailer' && user.id !== uid) return;
+
+            if (!spendingByUserMap[tx.userId]) {
+                spendingByUserMap[tx.userId] = {
+                    userId: tx.userId,
+                    userName: user.name || user.email || 'Unknown',
+                    role: user.role || 'retailer',
+                    totalSpent: 0
+                };
+            }
+            spendingByUserMap[tx.userId].totalSpent += Number(tx.amount) || 0;
+        });
+
+        const spendingByUser = Object.values(spendingByUserMap)
+            .sort((a, b) => b.totalSpent - a.totalSpent)
+            .slice(0, 50); // Top 50 spenders
+
+        console.log(`[Dashboard Stats] Total Spent: ${totalSpent}, Spending by ${spendingByUser.length} users`);
 
         // --- Geographic Analysis (Top Locations) ---
         const locationStats: Record<string, { count: number, revenue: number }> = {};
@@ -192,7 +251,7 @@ router.get('/dashboard', authenticate, async (req, res) => {
         res.json({
             kpi: {
                 totalTransactions,
-                totalRevenue,
+                totalSpent,
                 activeDealersCount,
                 failedTransactions,
                 systemBalance: displayBalance,
@@ -200,7 +259,9 @@ router.get('/dashboard', authenticate, async (req, res) => {
                 // New Financials
                 totalSimsBalance,
                 totalGameCardsBalance,
-                totalInternetCardsBalance
+                totalInternetCardsBalance,
+                // Spending breakdown
+                spendingByUser
             },
             geo: topLocations,
             offers: topOffers,
@@ -229,18 +290,31 @@ router.get('/transactions', async (req, res) => {
 router.get('/financials', authenticate, async (req, res) => {
     try {
         const { uid, role } = req.user!;
-        const { days } = req.query;
-        let periodDays = days ? Number(days) : 30; // Default 30 days
-        if (isNaN(periodDays)) periodDays = 30;
+        const { days, startDate, endDate } = req.query;
 
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - periodDays);
-        startDate.setHours(0, 0, 0, 0);
-        let startDateIso;
-        try {
-            startDateIso = startDate.toISOString();
-        } catch (e) {
-            startDateIso = new Date().toISOString(); // Fallback
+        let startDateIso: string;
+
+        // Handle custom date range or days-based period
+        if (startDate && endDate) {
+            // Custom date range
+            const start = new Date(startDate as string);
+            const end = new Date(endDate as string);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(23, 59, 59, 999);
+            startDateIso = start.toISOString();
+        } else {
+            // Days-based period (default)
+            let periodDays = days ? Number(days) : 30;
+            if (isNaN(periodDays)) periodDays = 30;
+
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - periodDays);
+            startDate.setHours(0, 0, 0, 0);
+            try {
+                startDateIso = startDate.toISOString();
+            } catch (e) {
+                startDateIso = new Date().toISOString(); // Fallback
+            }
         }
 
         // 1. Fetch Related Users (Retailers)
@@ -250,6 +324,10 @@ router.get('/financials', authenticate, async (req, res) => {
             // Trust strict parent-child relationship (Wholesaler only creates Retailers)
             // This avoids issues where role might be 'Retailer' (case sensitive) or missing active status
             retailersQuery = retailersQuery.where('createdBy', '==', uid) as any;
+        } else if (role === 'retailer') {
+            // Retailer sees NO other retailers
+            // We can just query for self to keep the array valid but size 1 (or 0)
+            retailersQuery = retailersQuery.where('__name__', '==', uid) as any;
         } else {
             // Admin: Fetch all retailers specifically
             retailersQuery = retailersQuery.where('role', '==', 'retailer') as any;
@@ -352,6 +430,13 @@ router.get('/financials', authenticate, async (req, res) => {
             }
         });
 
+        // --- NEW: Calculate Total SIMs Balance (for Admin Deficit Calculation) ---
+        let totalSimsBalance = 0;
+        if (role === 'super_admin' || role === 'super_wholesaler' || role === 'wholesaler') { // Assuming wholesalers also want to see this
+            const simsSnapshot = await db.collection('sims').get();
+            totalSimsBalance = simsSnapshot.docs.reduce((acc, doc) => acc + (Number(doc.data().balance) || 0), 0);
+        }
+
         // 4. Fetch History for Charts & Activity
         let txQuery = db.collection('transactions').where('createdAt', '>=', startDateIso);
 
@@ -369,6 +454,9 @@ router.get('/financials', authenticate, async (req, res) => {
                 // 1. Performed By Me (e.g. Balance Transfer to Retailer)
                 // 2. Performed By My Retailers (e.g. Flexy to Customer)
                 return tx.performedBy === uid || retailerIds.includes(tx.userId) || retailerIds.includes(tx.performedBy);
+            } else if (role === 'retailer') {
+                // Retailer: Only their own operations
+                return tx.userId === uid || tx.performedBy === uid;
             }
             return true;
         });
@@ -422,6 +510,15 @@ router.get('/financials', authenticate, async (req, res) => {
         let finalWholesalerBalance = 0;
         if (role === 'wholesaler') {
             finalWholesalerBalance = totalSystemBalance;
+        } else if (role === 'retailer') {
+            // For Retailer, System Balance is their wallet balance
+            totalSystemBalance = (walletsMap.get(uid)?.balance || 0);
+            finalWholesalerBalance = 0; // Not applicable
+            // Clear out other roles' data just in case
+            calculatedWholesalersBalance = 0;
+            totalTotalRetailersBalance = 0;
+            lowBalanceRetailers.length = 0;
+            activeRetailers.length = 0;
         } else {
             finalWholesalerBalance = calculatedWholesalersBalance; // For Admin, this is sum of wholesaler wallets
             // If Admin and calculatedWholesalersBalance is 0, maybe fallback to (System - Retailers)?
@@ -431,6 +528,45 @@ router.get('/financials', authenticate, async (req, res) => {
             }
         }
 
+        // --- PROFIT AGGREGATION ---
+        let totalAdminProfit = 0;
+        let totalWholesalerProfit = 0;
+        let totalRetailerProfit = 0;
+
+        // Time-based profit tracking
+        let todayProfit = 0;
+        let weekProfit = 0;
+        let monthProfit = 0;
+
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        relevantTransactions.forEach((tx: any) => {
+            if (tx.status === 'completed' && tx.financials) {
+                totalAdminProfit += (Number(tx.financials.adminProfit) || 0);
+                totalWholesalerProfit += (Number(tx.financials.wholesalerProfit) || 0);
+                totalRetailerProfit += (Number(tx.financials.retailerProfit) || 0);
+
+                // Calculate time-based profits for retailers
+                if (role === 'retailer' && tx.financials.retailerProfit) {
+                    const txDate = new Date(tx.createdAt);
+                    const profit = Number(tx.financials.retailerProfit) || 0;
+
+                    if (txDate >= todayStart) {
+                        todayProfit += profit;
+                    }
+                    if (txDate >= weekStart) {
+                        weekProfit += profit;
+                    }
+                    if (txDate >= monthStart) {
+                        monthProfit += profit;
+                    }
+                }
+            }
+        });
+
         res.json({
             // KPI Cards
             uid,
@@ -439,6 +575,16 @@ router.get('/financials', authenticate, async (req, res) => {
             totalWholesalerBalance: finalWholesalerBalance,
             totalRetailersBalance: totalTotalRetailersBalance,
             totalRetailerDebt,
+            totalSimsBalance, // Added field
+            totalAdminProfit,
+            totalWholesalerProfit,
+            totalRetailerProfit,
+
+            // Retailer time-based profits
+            todayProfit,
+            weekProfit,
+            monthProfit,
+            averageDailyProfit: monthProfit / 30,
 
             // Today
             todayVolume: todayStats.amount,

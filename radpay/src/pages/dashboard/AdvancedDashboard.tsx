@@ -10,7 +10,9 @@ import {
     Wifi, Gamepad
 } from "lucide-react";
 import { auth } from "../../lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import SpendingDetailsModal from "@/components/modals/SpendingDetailsModal";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -19,7 +21,9 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 export default function AdvancedDashboard() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showSpendingModal, setShowSpendingModal] = useState(false);
     const { t } = useLanguage();
+    const { role } = useAuth();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -51,6 +55,99 @@ export default function AdvancedDashboard() {
 
     const { kpi, geo, offers, time, dealers } = data;
 
+    const isPrivileged = ['admin', 'super_admin', 'wholesaler', 'super_wholesaler'].includes(role || '');
+
+    // RETAILER (NON-PRIVILEGED) VIEW
+    if (!isPrivileged) {
+        return (
+            <div className="space-y-6" dir="rtl">
+                {/* Retailer KPI Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <KPICard
+                        title="رصيدي الحالي"
+                        value={`${(kpi.systemBalance || 0).toLocaleString()} د.ج`}
+                        icon={<Wallet className="text-emerald-500" />}
+                        trend=""
+                    />
+                    <KPICard
+                        title="إجمالي العمليات"
+                        value={kpi.totalTransactions}
+                        icon={<Activity className="text-blue-500" />}
+                        trend=""
+                    />
+                    <KPICard
+                        title="إجمالي المدفوعات"
+                        value={`${(kpi.totalRevenue || 0).toLocaleString()} د.ج`}
+                        icon={<ArrowUpRight className="text-purple-500" />}
+                        trend=""
+                    />
+                </div>
+
+                {/* Retailer Charts (Personal Traffic) */}
+                <div className="bg-card border rounded-xl p-6 shadow-sm">
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-primary" />
+                        نشاطي اليومي
+                    </h3>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={time}>
+                                <defs>
+                                    <linearGradient id="colorCountRet" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
+                                <YAxis />
+                                <Tooltip labelFormatter={(h) => `${t('dash_time_tooltip')} ${h}:00`} />
+                                <Area type="monotone" dataKey="count" stroke="#3b82f6" fillOpacity={1} fill="url(#colorCountRet)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Offer Analysis (My Top Sales) */}
+                <div className="bg-card border rounded-xl p-6 shadow-sm">
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                        <Smartphone className="w-5 h-5 text-primary" />
+                        أكثر العروض مبيعاً
+                    </h3>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={offers}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {offers.map((entry: any, index: number) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="flex flex-wrap justify-center gap-2 mt-4">
+                            {offers.slice(0, 5).map((entry: any, index: number) => (
+                                <div key={index} className="flex items-center gap-1 text-xs">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                    <span>{entry.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ADMIN / WHOLESALER VIEW
     return (
         <div className="space-y-6" dir="rtl">
 
@@ -63,10 +160,12 @@ export default function AdvancedDashboard() {
                     trend="+12%" // Mock trend
                 />
                 <KPICard
-                    title={t('dash_total_revenue')}
-                    value={`${kpi.totalRevenue.toLocaleString()} د.ج`}
-                    icon={<Wallet className="text-green-500" />}
-                    trend="+5%"
+                    title="إجمالي المصروفات"
+                    value={`${(kpi.totalSpent || 0).toLocaleString()} د.ج`}
+                    icon={<TrendingDown className="text-red-500" />}
+                    trend=""
+                    onClick={() => setShowSpendingModal(true)}
+                    clickable={true}
                 />
                 <KPICard
                     title={t('dash_active_dealers')}
@@ -75,28 +174,32 @@ export default function AdvancedDashboard() {
                     trend="+2"
                 />
 
-                {/* Financial Breakdowns */}
-                <KPICard
-                    title="رصيد الشرائح (SIMs)"
-                    value={`${kpi.totalSimsBalance?.toLocaleString() || 0} د.ج`}
-                    icon={<Smartphone className="text-emerald-600" />}
-                    trend=""
-                    isNegative={false}
-                />
-                <KPICard
-                    title="رصيد بطاقات الألعاب"
-                    value={`${kpi.totalGameCardsBalance?.toLocaleString() || 0} د.ج`}
-                    icon={<Gamepad className="text-amber-500" />}
-                    trend=""
-                    isNegative={false}
-                />
-                <KPICard
-                    title="رصيد بطاقات الإنترنت"
-                    value={`${kpi.totalInternetCardsBalance?.toLocaleString() || 0} د.ج`}
-                    icon={<Wifi className="text-blue-600" />}
-                    trend=""
-                    isNegative={false}
-                />
+                {/* Financial Breakdowns - SUPER ADMIN ONLY */}
+                {role === 'super_admin' && (
+                    <>
+                        <KPICard
+                            title="رصيد الشرائح (SIMs)"
+                            value={`${kpi.totalSimsBalance?.toLocaleString() || 0} د.ج`}
+                            icon={<Smartphone className="text-emerald-600" />}
+                            trend=""
+                            isNegative={false}
+                        />
+                        <KPICard
+                            title="رصيد بطاقات الألعاب"
+                            value={`${kpi.totalGameCardsBalance?.toLocaleString() || 0} د.ج`}
+                            icon={<Gamepad className="text-amber-500" />}
+                            trend=""
+                            isNegative={false}
+                        />
+                        <KPICard
+                            title="رصيد بطاقات الإنترنت"
+                            value={`${kpi.totalInternetCardsBalance?.toLocaleString() || 0} د.ج`}
+                            icon={<Wifi className="text-blue-600" />}
+                            trend=""
+                            isNegative={false}
+                        />
+                    </>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -237,14 +340,24 @@ export default function AdvancedDashboard() {
                 </div>
             </div>
 
+            {/* Spending Details Modal */}
+            <SpendingDetailsModal
+                open={showSpendingModal}
+                onClose={() => setShowSpendingModal(false)}
+                spendingData={kpi.spendingByUser || []}
+                totalSpent={kpi.totalSpent || 0}
+            />
         </div>
     );
 }
 
-function KPICard({ title, value, icon, trend, isNegative }: any) {
+function KPICard({ title, value, icon, trend, isNegative, onClick, clickable }: any) {
     const { t } = useLanguage();
     return (
-        <div className="bg-card border p-6 rounded-xl shadow-sm flex flex-col justify-between">
+        <div
+            className={`bg-card border p-6 rounded-xl shadow-sm flex flex-col justify-between ${clickable ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}
+            onClick={onClick}
+        >
             <div className="flex justify-between items-start">
                 <div>
                     <p className="text-sm text-muted-foreground mb-1">{title}</p>
@@ -255,11 +368,18 @@ function KPICard({ title, value, icon, trend, isNegative }: any) {
                 </div>
             </div>
             <div className="mt-4 flex items-center text-xs">
-                <span className={`flex items-center ${isNegative ? 'text-red-500' : 'text-green-500'} font-medium`}>
-                    {trend.startsWith('-') ? <TrendingDown className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1" />}
-                    {trend}
-                </span>
-                <span className="text-muted-foreground mr-1">{t('dash_vs_yesterday')}</span>
+                {trend && (
+                    <>
+                        <span className={`flex items-center ${isNegative ? 'text-red-500' : 'text-green-500'} font-medium`}>
+                            {trend.startsWith('-') ? <TrendingDown className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1" />}
+                            {trend}
+                        </span>
+                        <span className="text-muted-foreground mr-1">{t('dash_vs_yesterday')}</span>
+                    </>
+                )}
+                {clickable && (
+                    <span className="text-primary text-xs mr-auto">اضغط للتفاصيل</span>
+                )}
             </div>
         </div>
     );

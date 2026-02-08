@@ -88,6 +88,26 @@ router.post('/ussd', async (req: Request, res: Response) => {
             // Fallback to Mock
             console.log(`[Router] Routing to Mock Gateway (Slot ${slot})`);
             const result = await gateway.sendUSSD(Number(slot) || 1, code);
+
+            // Apply same parsing logic for Mock results to update DB
+            if (result.success && result.message) {
+                const balanceMatch = result.message.match(/(\d[\d\.,]*\d|\d)\s*(?:DA|DZD)/i);
+                if (balanceMatch) {
+                    let rawBalance = balanceMatch[1];
+                    let normalized = rawBalance.replace(/\./g, '').replace(',', '.');
+                    const newBalance = parseFloat(normalized);
+
+                    console.log(`[Router] (Mock) Parsed Balance: ${newBalance}`);
+
+                    if (!isNaN(newBalance)) {
+                        await db.collection('sims').doc(String(slot)).update({
+                            balance: newBalance,
+                            updatedAt: new Date().toISOString()
+                        });
+                    }
+                }
+            }
+
             res.json(result);
         }
 
