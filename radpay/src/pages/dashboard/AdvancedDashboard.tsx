@@ -13,6 +13,8 @@ import { auth } from "../../lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import SpendingDetailsModal from "@/components/modals/SpendingDetailsModal";
+import { useDateFilter } from "@/contexts/DateFilterContext";
+import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -24,14 +26,21 @@ export default function AdvancedDashboard() {
     const [showSpendingModal, setShowSpendingModal] = useState(false);
     const { t } = useLanguage();
     const { role } = useAuth();
+    const { apiDateRange } = useDateFilter();
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             try {
                 const user = auth.currentUser;
                 const token = user ? await user.getIdToken() : null;
 
-                const res = await fetch(`${backendUrl}/stats/dashboard`, {
+                const queryParams = new URLSearchParams({
+                    startDate: apiDateRange.startDate,
+                    endDate: apiDateRange.endDate
+                });
+
+                const res = await fetch(`${backendUrl}/stats/dashboard?${queryParams}`, {
                     headers: {
                         'Authorization': token ? `Bearer ${token}` : ''
                     }
@@ -48,7 +57,7 @@ export default function AdvancedDashboard() {
             }
         };
         fetchData();
-    }, []);
+    }, [apiDateRange]); // Re-fetch when date range changes
 
     if (loading) return <div className="p-8 text-center">{t('dash_loading')}</div>;
     if (!data) return <div className="p-8 text-center text-red-500">{t('dash_error')}</div>;
@@ -61,6 +70,11 @@ export default function AdvancedDashboard() {
     if (!isPrivileged) {
         return (
             <div className="space-y-6" dir="rtl">
+                <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+                    <h2 className="text-xl font-bold tracking-tight">لوحة التحكم</h2>
+                    <DateRangeFilter />
+                </div>
+
                 {/* Retailer KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <KPICard
@@ -150,6 +164,10 @@ export default function AdvancedDashboard() {
     // ADMIN / WHOLESALER VIEW
     return (
         <div className="space-y-6" dir="rtl">
+            <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+                <h2 className="text-xl font-bold tracking-tight">لوحة التحكم</h2>
+                <DateRangeFilter />
+            </div>
 
             {/* 1. KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -201,6 +219,85 @@ export default function AdvancedDashboard() {
                     </>
                 )}
             </div>
+
+            {/* 1.5. Analytics Cards (Operators, Games, Internet) - ADMIN ONLY */}
+            {role === 'super_admin' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                    {/* Operators */}
+                    <div className="bg-card border rounded-xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                            <Smartphone className="w-5 h-5 text-primary" />
+                            الشبكات الأكثر نشاطاً
+                        </h3>
+                        <div className="h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={kpi.mostActiveOperators || []}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={70}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {(kpi.mostActiveOperators || []).map((entry: any, index: number) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            <div className="flex flex-wrap justify-center gap-2 mt-2">
+                                {(kpi.mostActiveOperators || []).map((entry: any, index: number) => (
+                                    <div key={index} className="flex items-center gap-1 text-xs">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                        <span>{entry.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Games */}
+                    <div className="bg-card border rounded-xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                            <Gamepad className="w-5 h-5 text-primary" />
+                            الألعاب الأكثر طلباً
+                        </h3>
+                        <div className="h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={kpi.mostActiveGames || []} layout="vertical">
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px' }} />
+                                    <Tooltip />
+                                    <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Internet Cards */}
+                    <div className="bg-card border rounded-xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                            <Wifi className="w-5 h-5 text-primary" />
+                            بطاقات الإنترنت الأكثر طلباً
+                        </h3>
+                        <div className="h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={kpi.mostActiveInternetCards || []} layout="vertical">
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={80} style={{ fontSize: '10px' }} />
+                                    <Tooltip />
+                                    <Bar dataKey="value" fill="#2563eb" radius={[0, 4, 4, 0]} barSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            )
+            }
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -347,7 +444,7 @@ export default function AdvancedDashboard() {
                 spendingData={kpi.spendingByUser || []}
                 totalSpent={kpi.totalSpent || 0}
             />
-        </div>
+        </div >
     );
 }
 

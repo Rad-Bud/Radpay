@@ -22,9 +22,11 @@ import Financials from "./pages/dashboard/Financials";
 import RechargeBalance from "./pages/dashboard/RechargeBalance";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import Contact from "./pages/Contact";
 import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "./contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { DateFilterProvider } from "@/contexts/DateFilterContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -34,50 +36,53 @@ const App = () => (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/terms-of-service" element={<TermsOfService />} />
+          <DateFilterProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/signup" element={<Signup />} />
+                  <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                  <Route path="/terms-of-service" element={<TermsOfService />} />
+                  <Route path="/contact" element={<Contact />} />
 
-                {/* Protected Routes */}
-                <Route element={<ProtectedRoute />}>
-                  <Route path="/dashboard" element={<Dashboard />} />
+                  {/* Protected Routes */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/dashboard" element={<Dashboard />} />
 
-                  {/* Users - Super Admin & Wholesaler */}
-                  <Route element={<ProtectedRoute allowedRoles={['super_admin', 'wholesaler']} />}>
-                    <Route path="/dashboard/users" element={<Users />} />
+                    {/* Users - Super Admin & Wholesaler */}
+                    <Route element={<ProtectedRoute allowedRoles={['super_admin', 'wholesaler']} />}>
+                      <Route path="/dashboard/users" element={<Users />} />
+                    </Route>
+
+                    {/* Super Admin Only */}
+                    <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
+                      <Route path="/dashboard/sims" element={<Sims />} />
+                      <Route path="/dashboard/offers" element={<Offers />} />
+                      <Route path="/dashboard/games" element={<Games />} />
+                      <Route path="/dashboard/delivery-apps" element={<DeliveryApps />} />
+                    </Route>
+
+                    {/* All Authenticated Users */}
+                    <Route path="/dashboard/financials" element={<Financials />} />
+                    <Route path="/dashboard/notifications" element={<Notifications />} />
+                    <Route path="/dashboard/complaints" element={<Complaints />} />
+                    <Route path="/dashboard/transactions" element={<Transactions />} />
+                    <Route path="/dashboard/recharge-balance" element={<RechargeBalance />} />
+                    <Route path="/dashboard/settings" element={<Settings />} />
                   </Route>
 
-                  {/* Super Admin Only */}
-                  <Route element={<ProtectedRoute allowedRoles={['super_admin']} />}>
-                    <Route path="/dashboard/sims" element={<Sims />} />
-                    <Route path="/dashboard/offers" element={<Offers />} />
-                    <Route path="/dashboard/games" element={<Games />} />
-                    <Route path="/dashboard/delivery-apps" element={<DeliveryApps />} />
-                  </Route>
+                  <Route path="/unauthorized" element={<Unauthorized />} />
 
-                  {/* All Authenticated Users */}
-                  <Route path="/dashboard/financials" element={<Financials />} />
-                  <Route path="/dashboard/notifications" element={<Notifications />} />
-                  <Route path="/dashboard/complaints" element={<Complaints />} />
-                  <Route path="/dashboard/transactions" element={<Transactions />} />
-                  <Route path="/dashboard/recharge-balance" element={<RechargeBalance />} />
-                  <Route path="/dashboard/settings" element={<Settings />} />
-                </Route>
-
-                <Route path="/unauthorized" element={<Unauthorized />} />
-
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </DateFilterProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>

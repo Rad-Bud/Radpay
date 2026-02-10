@@ -14,9 +14,6 @@ const Header = () => {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Rad Pay Logo" className="w-20 h-20 md:w-24 md:h-24 rounded-xl object-contain" />
-            <div>
-              <h1 className="text-lg md:text-xl font-bold text-gradient-primary">Rad Pay</h1>
-            </div>
           </div>
 
           {/* Desktop Navigation */}

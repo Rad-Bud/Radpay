@@ -3,6 +3,7 @@ import DashboardHeader from "./DashboardHeader";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
+
 interface DashboardLayoutProps {
     children: React.ReactNode;
 }

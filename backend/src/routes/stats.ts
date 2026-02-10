@@ -12,12 +12,15 @@ const getTodayStart = () => {
 };
 
 // GET /api/stats/dashboard - Comprehensive Dashboard Data
+// GET /api/stats/dashboard - Comprehensive Dashboard Data
 router.get('/dashboard', authenticate, async (req, res) => {
     try {
-        const todayStart = getTodayStart();
         const { uid, role } = req.user!;
+        // Extract Date Range from Query Params (default to Today if not provided)
+        const startDate = req.query.startDate as string || getTodayStart();
+        const endDate = req.query.endDate as string || new Date().toISOString();
 
-        console.log(`[Dashboard Stats] User: ${uid}, Role: ${role}`);
+        console.log(`[Dashboard Stats] User: ${uid}, Role: ${role}, Range: ${startDate} - ${endDate}`);
 
         // --- Role-Based Filtering Setup ---
         let userIdsToInclude: string[] = [];
@@ -38,9 +41,10 @@ router.get('/dashboard', authenticate, async (req, res) => {
         }
         // Admin/Super Admin: No filtering (see all)
 
-        // 1. Fetch Transactions (Today for time analysis)
+        // 1. Fetch Transactions (With Date Filter)
         let txQuery: FirebaseFirestore.Query = db.collection('transactions')
-            .where('createdAt', '>=', todayStart);
+            .where('createdAt', '>=', startDate)
+            .where('createdAt', '<=', endDate);
 
         if (userIdsToInclude.length > 0) {
             // Firestore 'in' supports max 10 items
@@ -48,6 +52,9 @@ router.get('/dashboard', authenticate, async (req, res) => {
                 txQuery = txQuery.where('userId', 'in', userIdsToInclude);
             }
         }
+
+        // Add ordering if possible (requires index)
+        // txQuery = txQuery.orderBy('createdAt', 'desc'); 
 
         const txSnapshot = await txQuery.get();
         let transactions = txSnapshot.docs.map(doc => doc.data());
@@ -57,22 +64,11 @@ router.get('/dashboard', authenticate, async (req, res) => {
             transactions = transactions.filter((tx: any) => userIdsToInclude.includes(tx.userId));
         }
 
-        console.log(`[Dashboard Stats] Found ${transactions.length} transactions for today`);
+        console.log(`[Dashboard Stats] Found ${transactions.length} transactions for range`);
 
-        // 2. Fetch All Transactions (for history/trends)
-        let allTxQuery: FirebaseFirestore.Query = db.collection('transactions')
-            .orderBy('createdAt', 'desc')
-            .limit(1000);
-
-        const allTxSnapshot = await allTxQuery.get();
-        let historyTx = allTxSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-
-        // Filter history by role
-        if (userIdsToInclude.length > 0) {
-            historyTx = historyTx.filter((tx: any) => userIdsToInclude.includes(tx.userId));
-        }
-
-        console.log(`[Dashboard Stats] Found ${historyTx.length} historical transactions`);
+        // 2. Metrics Data Source
+        // For Date Filter support, all metrics should reflect the selected range.
+        const historyTx = transactions;
 
         // 2. Fetch Users (for Location/Dealer analysis)
         const usersSnapshot = await db.collection('users').get();
@@ -96,6 +92,54 @@ router.get('/dashboard', authenticate, async (req, res) => {
         let totalSimsBalance = 0;
         let totalGameCardsBalance = 0;
         let totalInternetCardsBalance = 0;
+
+        // --- NEW: Analytics Cards Aggregation ---
+        const operatorCounts: Record<string, number> = { 'mobilis': 0, 'djezzy': 0, 'ooredoo': 0 };
+        const gameCounts: Record<string, number> = {};
+        const internetCounts: Record<string, number> = {};
+
+        const internetIds = ['idoom', 'fiber', 'adsl']; // IDs from Offers.tsx
+
+        historyTx.forEach((tx: any) => {
+            // 1. Operators (Flexy & Offers)
+            if (tx.type === 'flexy' || tx.type === 'offer') {
+                const op = tx.operator?.toLowerCase();
+                if (operatorCounts[op] !== undefined) {
+                    operatorCounts[op]++;
+                }
+            }
+
+            // 2. Games & Internet (Card Purchases)
+            if (tx.type === 'game_card_purchase') {
+                const gameId = tx.metadata?.gameId;
+                const pkgName = tx.metadata?.packageName || tx.metadata?.gameName || 'Unknown';
+
+                if (internetIds.includes(gameId)) {
+                    // Internet Card
+                    internetCounts[pkgName] = (internetCounts[pkgName] || 0) + 1;
+                } else {
+                    // Game Card
+                    const gameName = tx.metadata?.gameName || gameId; // Use Game Name if possible
+                    gameCounts[gameName] = (gameCounts[gameName] || 0) + 1;
+                }
+            }
+        });
+
+        // Format for Recharts
+        const mostActiveOperators = Object.entries(operatorCounts)
+            .map(([name, value]) => ({ name, value }))
+            // Sort by value desc
+            .sort((a, b) => b.value - a.value);
+
+        const mostActiveGames = Object.entries(gameCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5);
+
+        const mostActiveInternetCards = Object.entries(internetCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5);
 
         // ONLY Calculate for Super Admins
         if (role === 'super_admin') {
@@ -260,6 +304,10 @@ router.get('/dashboard', authenticate, async (req, res) => {
                 totalSimsBalance,
                 totalGameCardsBalance,
                 totalInternetCardsBalance,
+                // Analytics
+                mostActiveOperators,
+                mostActiveGames,
+                mostActiveInternetCards,
                 // Spending breakdown
                 spendingByUser
             },
@@ -575,7 +623,8 @@ router.get('/financials', authenticate, async (req, res) => {
             totalWholesalerBalance: finalWholesalerBalance,
             totalRetailersBalance: totalTotalRetailersBalance,
             totalRetailerDebt,
-            totalSimsBalance, // Added field
+            totalSimsBalance,
+
             totalAdminProfit,
             totalWholesalerProfit,
             totalRetailerProfit,
@@ -592,7 +641,7 @@ router.get('/financials', authenticate, async (req, res) => {
 
             // Lists
             activeRetailers,
-            lowBalanceRetailers, // < 5000
+            lowBalanceRetailers,
 
             // Chart
             chartData

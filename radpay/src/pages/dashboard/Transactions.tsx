@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ArrowUpRight, ArrowDownLeft, Wallet, History as HistoryIcon, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { useDateFilter } from "@/contexts/DateFilterContext";
+import { DateRangeFilter } from "@/components/dashboard/DateRangeFilter";
 
 const backendUrl = "http://localhost:3000/api";
 
@@ -13,12 +15,18 @@ const Transactions = () => {
     const { role, user } = useAuth(); // Get user object
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const { apiDateRange } = useDateFilter();
 
     useEffect(() => {
         const fetchTransactions = async () => {
+            setLoading(true);
             try {
-                const url = `${backendUrl}/transactions`;
-                console.log('[Transactions] Role:', role, 'UID:', user?.uid);
+                const queryParams = new URLSearchParams({
+                    startDate: apiDateRange.startDate,
+                    endDate: apiDateRange.endDate
+                });
+                const url = `${backendUrl}/transactions?${queryParams}`;
+                console.log('[Transactions] Role:', role, 'UID:', user?.uid, 'Range:', apiDateRange);
 
                 // Get auth token
                 const token = await user?.getIdToken();
@@ -30,8 +38,14 @@ const Transactions = () => {
                 const res = await fetch(url, { headers });
                 if (res.ok) {
                     const data = await res.json();
-                    console.log('[Transactions] Received:', data.length, 'transactions');
-                    setTransactions(data);
+                    console.log('[Transactions] Received:', Array.isArray(data) ? data.length : 'Not Array', 'transactions');
+
+                    if (Array.isArray(data)) {
+                        setTransactions(data);
+                    } else {
+                        console.error('Expected array but got:', data);
+                        setTransactions([]);
+                    }
                 } else {
                     console.error('[Transactions] Error:', res.status, res.statusText);
                 }
@@ -42,7 +56,7 @@ const Transactions = () => {
             }
         };
         fetchTransactions();
-    }, [role, user?.uid]); // Add dependencies
+    }, [role, user?.uid, apiDateRange]); // Add dependencies
 
     const getTypeColor = (type: string) => {
         switch (type) {
@@ -67,9 +81,12 @@ const Transactions = () => {
     return (
         <DashboardLayout>
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-3xl font-bold">سجل العمليات</h1>
-                    <p className="text-muted-foreground">تاريخ جميع العمليات المالية والنشاطات</p>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold">سجل العمليات</h1>
+                        <p className="text-muted-foreground">تاريخ جميع العمليات المالية والنشاطات</p>
+                    </div>
+                    <DateRangeFilter />
                 </div>
 
                 <div className="rounded-xl border bg-card">

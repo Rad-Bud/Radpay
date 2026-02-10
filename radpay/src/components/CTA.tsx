@@ -23,7 +23,7 @@ const CTA = () => {
 
           {/* Heading */}
           <h2 className="text-3xl md:text-5xl lg:text-6xl font-black mb-6">
-            جاهز لتحويل <span className="text-gradient-primary">أعمالك؟</span>
+            جاهز لتحويل <span className="text-gradient-primary">أعمالك</span>؟
           </h2>
 
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
@@ -36,7 +36,7 @@ const CTA = () => {
               ابدأ مجاناً الآن
               <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             </Button>
-            <Button variant="glass" size="xl">
+            <Button variant="glass" size="xl" onClick={() => navigate("/contact")}>
               تحدث مع فريق المبيعات
             </Button>
           </div>

@@ -24,17 +24,22 @@ router.get('/', async (req, res) => {
         const authHeader = req.headers.authorization;
         let authenticatedUser: { uid: string; role: string } | null = null;
 
+        // Extract Date Range
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+        const hasDateFilter = startDate && endDate;
+
         if (authHeader?.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
             try {
                 const decodedToken = await admin.auth().verifyIdToken(token);
-                const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-                const userData = userDoc.data();
+                // Trust the token role (Custom Claim) - matching stats.ts logic
+                const role = decodedToken.role as string || 'retailer';
+
                 authenticatedUser = {
                     uid: decodedToken.uid,
-                    role: userData?.role || 'retailer'
+                    role: role
                 };
-                console.log(`[GET /transactions] Authenticated user: ${authenticatedUser.uid}, Role: ${authenticatedUser.role}`);
             } catch (authError) {
                 console.error('[GET /transactions] Auth error:', authError);
             }
@@ -49,11 +54,15 @@ router.get('/', async (req, res) => {
             if (role === 'retailer') {
                 // Retailer: Only their own transactions
                 console.log(`[GET /transactions] Fetching transactions for retailer: ${uid}`);
-                const snapshot = await db.collection('transactions')
-                    .where('userId', '==', uid)
-                    .limit(50)
-                    .get();
+                let query = db.collection('transactions').where('userId', '==', uid);
 
+                if (hasDateFilter) {
+                    query = query.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+                } else {
+                    query = query.limit(50);
+                }
+
+                const snapshot = await query.get();
                 transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
                 transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -79,10 +88,16 @@ router.get('/', async (req, res) => {
 
                 for (let i = 0; i < userIdsToFetch.length; i += batchSize) {
                     const batch = userIdsToFetch.slice(i, i + batchSize);
-                    const snapshot = await db.collection('transactions')
-                        .where('userId', 'in', batch)
-                        .limit(200)
-                        .get();
+                    let query = db.collection('transactions')
+                        .where('userId', 'in', batch);
+
+                    if (hasDateFilter) {
+                        query = query.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+                    } else {
+                        query = query.limit(200);
+                    }
+
+                    const snapshot = await query.get();
                     allSnapshots.push(...snapshot.docs);
                 }
 
@@ -92,23 +107,63 @@ router.get('/', async (req, res) => {
 
             } else {
                 // Admin/Super Admin: All transactions
-                console.log(`[GET /transactions] Fetching all transactions for admin: ${uid}`);
+                try {
+                    let query = db.collection('transactions') as FirebaseFirestore.Query;
+
+                    if (hasDateFilter) {
+                        // Filter by date range
+                        query = query.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+                        // Ideally orderBy createdAt, but requires index. We interpret range as implicit order? No.
+                        // query = query.orderBy('createdAt', 'desc'); 
+                    } else {
+                        // Default: Latest 50
+                        query = query.orderBy('createdAt', 'desc').limit(50);
+                    }
+
+                    const snapshot = await query.get();
+                    transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                } catch (orderByError: any) {
+                    // Fallback
+                    console.warn(`[GET /transactions] Query failed (missing index?), fetching fallback. Error: ${orderByError.message}`);
+                    let fallbackQuery = db.collection('transactions') as FirebaseFirestore.Query;
+
+                    if (hasDateFilter) {
+                        fallbackQuery = fallbackQuery.where('createdAt', '>=', startDate).where('createdAt', '<=', endDate);
+                    } else {
+                        fallbackQuery = fallbackQuery.limit(50);
+                    }
+
+                    try {
+                        const snapshot = await fallbackQuery.get();
+                        transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                    } catch (fallbackError) {
+                        console.error('Fallback query also failed', fallbackError);
+                        transactions = [];
+                    }
+
+                    transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                }
+            }
+        } else {
+            // No authentication - return all (for backward compatibility)
+            console.log(`[GET /transactions] No authentication - fetching all transactions`);
+
+            try {
                 const snapshot = await db.collection('transactions')
                     .orderBy('createdAt', 'desc')
                     .limit(50)
                     .get();
 
                 transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-            }
-        } else {
-            // No authentication - return all (for backward compatibility)
-            console.log(`[GET /transactions] No authentication - fetching all transactions`);
-            const snapshot = await db.collection('transactions')
-                .orderBy('createdAt', 'desc')
-                .limit(50)
-                .get();
+            } catch (orderByError: any) {
+                console.log(`[GET /transactions] orderBy failed (no auth), fetching without ordering:`, orderByError.message);
+                const snapshot = await db.collection('transactions')
+                    .limit(50)
+                    .get();
 
-            transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+                transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            }
         }
 
         console.log(`[GET /transactions] Returning ${transactions.length} transactions`);

@@ -10,16 +10,16 @@ import { Button } from "@/components/ui/button";
 const services = [
   {
     icon: Smartphone,
-    title: "شحن الرصيد",
+    title: "شحن كل الأرصدة",
     description: "شحن رصيد جميع شبكات الاتصال آلياً عبر شرائح SIM مع تأكيد فوري",
-    features: ["تنفيذ آلي", "توزيع ذكي", "تأكيد SMS"],
+    features: ["موبيليس", "جيزي", "أوريدو"],
     color: "primary"
   },
   {
     icon: Wallet,
-    title: "المحفظة المالية",
-    description: "محفظة رقمية لكل مكتب مع شحن مسبق وخصم تلقائي عند كل عملية",
-    features: ["رصيد مسبق", "كشف حساب", "تقارير يومية"],
+    title: "شحن كل بطاقات الإنترنت",
+    description: "جميع بطاقات شحن الإنترنت متوفرة لجميع الخدمات والباقات",
+    features: ["ADSL", "FIBER", "IDOOM"],
     color: "gold"
   },
   {

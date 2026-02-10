@@ -58,6 +58,10 @@
     --shadow-glow: 0 0 20px hsl(160 84% 39% / 0.15);
     --shadow-card: 0 4px 12px hsl(222 47% 11% / 0.1);
     --shadow-elevated: 0 10px 30px hsl(222 47% 11% / 0.15);
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(160 84% 39%), hsl(160 70% 50%));
+    --gradient-gold: linear-gradient(135deg, hsl(45 93% 58%), hsl(45 70% 45%));
   }
 
   .dark {
